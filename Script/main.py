@@ -3,6 +3,19 @@ from mysql.connector import errorcode
 import random
 from faker import Faker
 
+#TODO: 
+# Trigger for joining / leaving guilds (member count)
+# Trigger for deactivting guilds with 0 members
+# Not overloading servers (active < capacity)
+# Trigger to update server status (Low, mid, high, Full, maintinance, down)
+# Inventory system
+# Friends system
+
+# Anything interesting to look at from program:
+# Query amount of "muliboxers"
+# Select account and "log in", query if server is full or not
+# Make server go down / into maintinance or go up again
+
 VERBAL = False
 dbName = "GameData"
 
@@ -183,7 +196,7 @@ def PopulateTables(session, connection):
     # Fake data generator
     fData = Faker()
     
-    numServers = random.randint(2, 10)
+    numServers = random.randint(2, 5)
     serverNames = [fData.unique.country() for i in range(numServers * 15)]
     for i, name in enumerate(serverNames):
         if _SafeQuery( 
@@ -207,15 +220,16 @@ def PopulateTables(session, connection):
         if (i % numGuilds == 0):
             print("{}".format("x"), end="", flush=True)
     
-    numAccounts = random.randint(25, 500)
+    numAccounts = random.randint(25, 150)
     for i in range(numAccounts * 20):
         if _SafeQuery(
             session,
-            "INSERT INTO Accounts VALUES (0, \"{}\", \"{}\", \"{}\", \"{}\", True);".format(
+            "INSERT INTO Accounts VALUES (0, \"{}\", \"{}\", \"{}\", \"{}\", {});".format(
                 fData.street_name(),
                 fData.password(),
                 fData.first_name(),
-                fData.last_name()
+                fData.last_name(),
+                fData.boolean()
             )) != 0:
             return -1
         connection.commit()
