@@ -133,16 +133,17 @@ def _InitTriggers(session):
             break
     return retCode
  
-def _SafeQuery(session, query):
+def _SafeQuery(session, query, silent=False):
     retCode = 0
     try:
         session.execute(query)
     except sql.Error as err:
-        print("\r[w]\tQuery '{}' failed with error: '{}'".format(query, session))
+        if not silent:
+            print("\r[w]\tQuery '{}' failed with error: '{}'".format(query, session))
         retCode = -1
     return retCode
 
-def CreateDB(session):    
+def CreateDB(session, *void):    
     if _InitDatabase(session) != 0:
         return -1
     if _UseDatabase(session) != 0:
@@ -154,7 +155,7 @@ def CreateDB(session):
     print("\r[+]\tCreated Database")
     return 0
 
-def DeleteDB(session):
+def DeleteDB(session, *void):
     retCode = 0
     try:
         session.execute("DROP DATABASE {}".format(dbName))
@@ -164,7 +165,7 @@ def DeleteDB(session):
         retCode = -1
     return retCode 
 
-def PopulateTables(session):
+def PopulateTables(session, connection):
     if _UseDatabase(session) != 0:
         return -1
     if _SafeQuery(session, "SELECT * FROM SERVERS;") != 0:
@@ -176,51 +177,94 @@ def PopulateTables(session):
     # Load bar
     print("\r[+]\tGenerating data for tables...")
     print("\r[{}]".format("-"*50),end="")
-    print("\r[", end="")
+    print("\r[", end="", flush=True)
     
     
     # Fake data generator
     fData = Faker()
     
-    numServers = random.randint(10, 15)
-    # Generate ...
-    print("{}".format("x"*15), end="")
+    numServers = random.randint(2, 10)
+    serverNames = [fData.unique.country() for i in range(numServers * 15)]
+    for i, name in enumerate(serverNames):
+        if _SafeQuery( 
+            session,
+            "INSERT INTO Servers VALUES (\"{}\", {}, 0, \"Running\");".format(name, random.randint(100, 1000))
+            ) != 0:
+            return -1
+        connection.commit()
+        if i % numServers == 0:
+            print("{}".format("x"), end="", flush=True)
     
+    numGuilds = random.randint(2, 20)
+    guildNames = [fData.unique.city() for i in range(numGuilds * 15)]
+    for i, name in enumerate(guildNames):
+        if _SafeQuery( 
+            session,
+            "INSERT INTO Guilds VALUES (\"{}\", 0, {}, True);".format(name, random.randint(100,10_000))
+            ) != 0:
+            return -1
+        connection.commit()
+        if (i % numGuilds == 0):
+            print("{}".format("x"), end="", flush=True)
     
-    numGuilds = random.randint(1, 5_000)
-    # Generate ...
-    print("{}".format("x"*15), end="")
-    
-    
-    numAccounts = random.randint(100, 10_000)
-    accounts = []
-    #for uid in range(2):
-    #    print(fData.first_name())
-    #    print(fData.last_name())
-    #    print(uid)
-    #    print(fData.password())
-    
-    for i in range(numAccounts):
+    numAccounts = random.randint(25, 500)
+    for i in range(numAccounts * 20):
+        if _SafeQuery(
+            session,
+            "INSERT INTO Accounts VALUES (0, \"{}\", \"{}\", \"{}\", \"{}\", True);".format(
+                fData.street_name(),
+                fData.password(),
+                fData.first_name(),
+                fData.last_name()
+            )) != 0:
+            return -1
+        connection.commit()
+
         numCharacters = random.randint(1, 12)
-        numItems = random.randint(1, 128)
-        # Generate ...
+        for _ in range(numCharacters):
+            while _SafeQuery(
+                session,
+                "INSERT INTO PlayerCharacters VALUES (\"{}\", {}, \"{}\", \"{}\", {}, {}, \"{}\");".format(
+                    fData.name(), # Character name
+                    i + 1, # Account id
+                    random.choice(serverNames), # Server
+                    random.choice(guildNames), # Guild
+                    fData.boolean(), # Logged in
+                    random.randint(1, 20), # Level
+                    random.choice([  # Class
+                            "Fighter",
+                            "Cleric",
+                            "Ranger",
+                            "Wizard",
+                            "Sorcerer",
+                            "Warlock",
+                            "Bard",
+                            "Barbarian",
+                            "Druid"
+                        ])
+                ),
+                silent=True
+                ) != 0:
+                pass
+            connection.commit()
         
-    print("{}".format("x"*20))
-    print("\r\n[+]\tFinished generating data...")
+        if (i % numAccounts == 0):
+            print("{}".format("x"), end="", flush=True)
+    print("\r\n[+]\tFinished generating data...", flush=True)
     return 0
 
-def RePopulateTables(session):
+def RePopulateTables(session, connection):
     if DeleteDB(session) != 0:
         return -1
     if CreateDB(session) != 0:
         return -1
-    return PopulateTables(session)
+    return PopulateTables(session, connection)
 # ================================================== ==================================================
 
-def PrintHelp(void):
-    print("Options:\n0: Quit\n1: Create Database\n2: Delete Database\n3: Generate Table Data\n4: Re-Generate Table Data\n5: Help")
-def NullFunc(void):
+def NullFunc(*void):
     return
+def PrintHelp(*void):
+    print("Options:\n0: Quit\n1: Create Database\n2: Delete Database\n3: Generate Table Data\n4: Re-Generate Table Data\n5: Help")
 
 if __name__ == "__main__":
     connection = SQLConnect()
@@ -238,15 +282,18 @@ if __name__ == "__main__":
         5: PrintHelp
     }
     
-    PrintHelp(0)
+    PrintHelp()
     while True:
-        cmd = int(input("Enter input: "))
+        try:
+            cmd = int(input("Enter input: "))
+        except:
+            print("\r[w]\tInvalid Input, try again...")
+            continue
         if cmd == 0:
             break
         
-        switchCase.get(cmd, NullFunc)(session)
-    
-    
+        switchCase.get(cmd, NullFunc)(session, connection)
+
     session.close()
     connection.close()
     print("\r[+]\tDone...")
