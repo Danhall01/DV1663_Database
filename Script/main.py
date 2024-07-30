@@ -1,13 +1,10 @@
 import mysql.connector as sql
 from mysql.connector import errorcode
+import random
+from faker import Faker
 
-
-#For this project I want to create a database back-end for a game. Meaning that the database will track every player, their associated server (and the servers themselves). It will also keep track of every players inventory.
-#The reasoning for these two things is that the inventory can be easily rolled back in case something happens, and it will be easy for players to query items they have.
-#As for the servers, this will allow players to have a friends list or similar functionality and thereby quickly and efficiently query for all of the player data of their friends (to then be displayed by the game).
-#The meta data used by the server can for example be a number for amount of players who play on it, and however many are online. This can easily be updated by a trigger instead of having to query the entire server every time this data gets requested.
-#The amount of things stored in this data set can easily be expanded to cover more things such as, friends, team members, guild members, etc.
-
+VERBAL = False
+dbName = "GameData"
 
 def SQLConnect():
     return sql.connect(
@@ -18,30 +15,203 @@ def SQLConnect():
         unix_socket= '/Applications/MAMP/tmp/mysql/mysql.sock'
     )
 
-
-def InitDatabase(session, dbName):
+# DB and data creation
+# ================================================== ==================================================
+def _InitDatabase(session):
+    retCode = 0
     try:
         session.execute("CREATE DATABASE {} DEFAULT CHARACTER SET 'utf8'".format(dbName))
     except sql.Error as err:
-        print("Failed to create database '{}' with error '{}'".format(dbName, err))
-        if err.errno != 1007:
-            exit(1)
+        print("\r[{}]\tFailed to create database '{}' with error: '{}'".format("w" if err.errno == 1007 else "-", dbName, err))
+        retCode = -1
+    return retCode
 
+def _UseDatabase(session):
+    retCode = 0
+    try:
+        session.execute("USE {};".format(dbName))
+    except sql.Error as err:
+        print("\r[w]\tFailed to set database with error: '{}'.".format(err))
+        retCode = -1
+    return retCode
 
-def InitTables(session):
-    query = "" \
-            ""
-    
+def _InitTables(session):
+    queries = [
+        "CREATE TABLE Accounts ("               \
+            "Id INT NOT NULL AUTO_INCREMENT,"   \
+            "Username varchar(255) NOT NULL,"   \
+            "Password varchar(255) NOT NULL,"   \
+            "FirstName varchar(255) NOT NULL,"  \
+            "LastName varchar(255) NOT NULL,"   \
+            "Active boolean NOT NULL,"          \
+            "PRIMARY KEY (Id)"                  \
+        ");",
+        
+        "CREATE TABLE Servers ("            \
+            "Name VARCHAR(255) NOT NULL,"   \
+            "Capacity INT NOT NULL,"        \
+            "ActivePlayers INT NOT NULL,"   \
+            "Status VARCHAR(255) NOT NULL," \
+            "PRIMARY KEY (Name)"            \
+        ");",
+        
+        # Guilds here are cross-server and hence are only limited by name
+        "CREATE TABLE Guilds ("                                 \
+            "Name VARCHAR(255) NOT NULL,"                       \
+            "Members INT NOT NULL,"                             \
+            "Score INT NOT NULL,"                               \
+            "Active Boolean NOT NULL,"                          \
+            "PRIMARY KEY (Name)"                                \
+        ");",
+        
+        # PC here uses a "Composite Key" to let names be server bound
+        "CREATE TABLE PlayerCharacters ("                           \
+            "Name varchar(255) NOT NULL,"                           \
+            "AccountId INT NOT NULL,"                               \
+            "ServerId VARCHAR(255) NOT NULL,"                       \
+            "GuildId VARCHAR(255),"                                 \
+            "IsLoggedIn Boolean NOT NULL,"                            \
+            "Level INT NOT NULL,"                                   \
+            "Class varchar(255) NOT NULL,"                          \
+            "FOREIGN KEY (AccountId) REFERENCES Accounts(Id),"      \
+            "FOREIGN KEY (ServerId) REFERENCES Servers(Name),"      \
+            "FOREIGN KEY (GuildId) REFERENCES Guilds(Name),"        \
+            "CONSTRAINT CharacterId PRIMARY KEY (Name,ServerId)"    \
+        ");"
+        
+
+    ]
+    retCode = 0
+    for query in queries:
+        try:
+            if VERBAL:
+                print("\r[d]\tQuery: '{}'".format(query))
+            session.execute(query)
+        except sql.Error as err:
+            print("\r[{}]\tFailed to create tables with error: '{}'".format("w" if err.errno == 1050 else "-", err))
+            retCode = -1
+        if retCode != 0:
+            break
+    return retCode
+
+def _InitTriggers(session):
+    tQueries = [
+        # Updates the server count for logged in players
+        "CREATE TRIGGER onCreation "                                     \
+        "AFTER INSERT ON PlayerCharacters "                              \
+        "FOR EACH ROW "                                                  \
+        "BEGIN "                                                         \
+            "IF new.IsLoggedIn = True THEN "                             \
+                "UPDATE servers "                                        \
+                "SET servers.ActivePlayers = servers.ActivePlayers + 1 " \
+                "WHERE servers.Name = NEW.ServerId; "                    \
+            "END IF; "                                                   \
+        "END",
+
+        # Updates the server upon a character being logged in or out
+        "CREATE TRIGGER onLogInOut "                                                             \
+        "AFTER UPDATE ON PlayerCharacters "                                                      \
+        "FOR EACH ROW "                                                                          \
+        "BEGIN "                                                                                 \
+            "IF old.IsLoggedIn != new.IsLoggedIn THEN "                                          \
+                "UPDATE servers "                                                                \
+                "SET servers.ActivePlayers = servers.ActivePlayers + (NEW.IsLoggedIn * 2 - 1) "  \
+                "WHERE servers.Name = NEW.ServerId; "                                            \
+            "END IF;"                                                                            \
+        "END"
+    ]
+    retCode = 0
+    for query in tQueries:
+        try:
+            if VERBAL:
+                print("\r[d]\tTrigger: '{}'".format(query))
+            session.execute(query)
+        except sql.Error as err:
+            print("\r[{}]\tFailed to add trigger with error: '{}'".format("w", err))
+            retCode = -1
+        if retCode != 0:
+            break
+    return retCode
+ 
+def _SafeQuery(session, query):
+    retCode = 0
     try:
         session.execute(query)
     except sql.Error as err:
-        print("Failed to create tables with error '{}'".format(err))
-        if err.errno != 1007:
-            exit(1)
+        print("\r[w]\tQuery '{}' failed with error: '{}'".format(query, session))
+        retCode = -1
+    return retCode
 
-            
+def CreateDB(session):    
+    if _InitDatabase(session) != 0:
+        return -1
+    if _UseDatabase(session) != 0:
+        return -1
+    if _InitTables(session) != 0:
+        return -1
+    return _InitTriggers(session)
+
+def DeleteDB(session):
+    retCode = 0
+    try:
+        session.execute("DROP DATABASE {}".format(dbName))
+    except sql.Error as err:
+        print("\r[w]\tCould not delete database, error: '{}'".format(err))
+        retCode = -1
+    return retCode 
+
 def PopulateTables(session):
-    return
+    if _UseDatabase(session) != 0:
+        return -1
+    if _SafeQuery(session, "SELECT * FROM SERVERS;") != 0:
+        return -1
+    if len(session.fetchall()) > 0:
+        print("\r[w]\tTables already contain data, use the Repopulate option to re-generate data.")
+        return -1
+    
+    # Load bar
+    print("\r[+]\tGenerating data for tables...")
+    print("\r[{}]".format("-"*50),end="")
+    print("\r[", end="")
+    
+    
+    # Fake data generator
+    fData = Faker()
+    
+    numServers = random.randint(10, 15)
+    # Generate ...
+    print("{}".format("x"*15), end="")
+    
+    
+    numGuilds = random.randint(1, 5_000)
+    # Generate ...
+    print("{}".format("x"*15), end="")
+    
+    
+    numAccounts = random.randint(100, 10_000)
+    accounts = []
+    #for uid in range(2):
+    #    print(fData.first_name())
+    #    print(fData.last_name())
+    #    print(uid)
+    #    print(fData.password())
+    
+    for i in range(numAccounts):
+        numCharacters = random.randint(1, 12)
+        numItems = random.randint(1, 128)
+        # Generate ...
+        
+    print("{}".format("x"*20))
+    print("\r\n[+]\tFinished generating data...")
+    return 0
+
+def RePopulateTables(session):
+    if DeleteDB(session) != 0:
+        return -1
+    if CreateDB(session) != 0:
+        return -1
+    return PopulateTables(session)
+# ================================================== ==================================================
 
 
 if __name__ == "__main__":
@@ -49,12 +219,19 @@ if __name__ == "__main__":
     session = connection.cursor()
     
     
-    InitDatabase(session, "GameData")
-    InitTables(session)
+    # Option "1: Init Database"
+    CreateDB(session)
     
+    # Option "2: Delete Database"
+    # DeleteDB(session)
     
-    session.execute("DROP DATABASE GameData")
+    # Option "3: Generate Data"
+    PopulateTables(session)
+    
+    # Option "4: Re-Generate Data"
+    # RePopulateTables(session)
+    
     
     session.close()
     connection.close()
-    print("Done...")
+    print("\r[+]\tDone...")
