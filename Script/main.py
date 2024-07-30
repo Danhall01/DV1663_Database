@@ -149,12 +149,16 @@ def CreateDB(session):
         return -1
     if _InitTables(session) != 0:
         return -1
-    return _InitTriggers(session)
+    if _InitTriggers(session) != 0:
+        return -1
+    print("\r[+]\tCreated Database")
+    return 0
 
 def DeleteDB(session):
     retCode = 0
     try:
         session.execute("DROP DATABASE {}".format(dbName))
+        print("\r[+]\tDeleted Database")
     except sql.Error as err:
         print("\r[w]\tCould not delete database, error: '{}'".format(err))
         retCode = -1
@@ -213,23 +217,34 @@ def RePopulateTables(session):
     return PopulateTables(session)
 # ================================================== ==================================================
 
+def PrintHelp(void):
+    print("Options:\n0: Quit\n1: Create Database\n2: Delete Database\n3: Generate Table Data\n4: Re-Generate Table Data\n5: Help")
+def NullFunc(void):
+    return
 
 if __name__ == "__main__":
     connection = SQLConnect()
     session = connection.cursor()
     
+    switchCase = {
+        # Option "1: Init Database"
+        1: CreateDB,
+        # Option "2: Delete Database"
+        2: DeleteDB,
+        # Option "3: Generate Data"
+        3: PopulateTables,
+        # Option "4: Re-Generate Data"
+        4: RePopulateTables,
+        5: PrintHelp
+    }
     
-    # Option "1: Init Database"
-    CreateDB(session)
-    
-    # Option "2: Delete Database"
-    # DeleteDB(session)
-    
-    # Option "3: Generate Data"
-    PopulateTables(session)
-    
-    # Option "4: Re-Generate Data"
-    # RePopulateTables(session)
+    PrintHelp(0)
+    while True:
+        cmd = int(input("Enter input: "))
+        if cmd == 0:
+            break
+        
+        switchCase.get(cmd, NullFunc)(session)
     
     
     session.close()
