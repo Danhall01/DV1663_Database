@@ -8,12 +8,29 @@ from faker import Faker
 # Friends system
 
 #TODO Anything interesting to look at from program:
+### USER
 # Set Active account (Program)
 # Activate / Deactivate Account
 # Create / Delete Characters
-# Make server go down / into maintinance or go up again (Admin Account)
+# Display all characters (n/12 used slots\n...) (Character JOIN server JOIN guild)
+
 # Reserve Guildname (Set active with no members)
+# Create Guild
+# Join Guild
+# Leave Guild
+# Get Guild Information (Amount of players, Online players & Who + their server)
+
 # Collect items (GetRandomItem())
+
+### ADMIN
+# Deactivate user
+# Activate user
+# Shut down guild (kill)
+# Delete inactive guilds
+
+### SERVER
+# Make server go down / into maintinance
+# Make server go up again
 
 VERBAL = False
 g_dbName = "GameData"
@@ -220,17 +237,17 @@ def _SafeQuery(session, query, silent=False):
         retCode = -1
     return retCode
 
-def CreateServer(session, connection, name, capacity=256):
+def CreateServer(session, connection, sName, capacity=256):
     query = "INSERT INTO Servers VALUES (\"{}\", {}, 0, \"Inactive\");"\
-        "".format(name, capacity)
+        "".format(sName, capacity)
     if _SafeQuery(session, query) != 0:
         return -1
     connection.commit()
     return 0
 
-def CreateGuild(session, connection, name):
+def CreateGuild(session, connection, gName):
     query = "INSERT INTO Guilds VALUES (\"{}\", 0, 0, False);"\
-        "".format(name)
+        "".format(gName)
     if _SafeQuery(session, query) != 0:
         return -1
     connection.commit()
@@ -249,10 +266,10 @@ def CreateUser(session, connection, username, password, fName, lName):
     connection.commit()
     return 0
 
-def CreateCharacter(session, connection, name, whom, server, className):
+def CreateCharacter(session, connection, cName, whom, server, className):
     query = "INSERT INTO PlayerCharacters VALUES (\"{}\", {}, \"{}\", {}, {}, {}, \"{}\");"\
         "".format(
-                name,       # Character name
+                cName,       # Character name
                 whom,       # Account id
                 server,     # Server
                 "NULL",     # Guild
@@ -265,7 +282,7 @@ def CreateCharacter(session, connection, name, whom, server, className):
     connection.commit()
     return 0
 
-def LogInCharacter(session, connection, userId, name, server, silent=False):
+def LogInCharacter(session, connection, userId, cName, server, silent=False):
     # Check if login is possible
     queryIsLoggedIn = "SELECT COUNT(*) FROM PlayerCharacters "\
                       "WHERE PlayerCharacters.AccountId = {} "\
@@ -295,19 +312,19 @@ def LogInCharacter(session, connection, userId, name, server, silent=False):
                 "SET PlayerCharacters.IsLoggedIn = True "\
                 "WHERE PlayerCharacters.Name = \"{}\" "\
                 "AND PlayerCharacters.ServerId = \"{}\""\
-                "".format(name, server)
+                "".format(cName, server)
     if _SafeQuery(session, queryLogIn) != 0:
         return -1
     connection.commit()
     return 0
 
-def LevelUp(session, connection, name, server, levels):
+def LevelUp(session, connection, cName, server, levels):
     query = "UPDATE PlayerCharacters " \
             "SET PlayerCharacters.Level = LEAST(PlayerCharacters.Level + GREATEST(0, {}), 20) "\
             "WHERE PlayerCharacters.Name = \"{}\" AND PlayerCharacters.ServerId = \"{}\";"\
             "".format(
                     levels,
-                    name,
+                    cName,
                     server)
     if _SafeQuery(session, query) != 0:
         return -1
@@ -320,6 +337,9 @@ def SetUserStatus(session, connection, userId, active):
         return -1
     connection.commit()
     return 0
+
+def JoinGuild(session, connection, userId, cName, server, guildName):
+    
 
 def CreateDB(session, *void):    
     if _InitDatabase(session) != 0:
@@ -408,6 +428,8 @@ def PopulateTables(session, connection):
                 if fData.boolean():
                     # Log in or not, it does not really matter here
                     LogInCharacter(session, connection, i + 1, nameChoice, serverChoice, silent=True)
+                if
+                
                 break
                 
         if (i % numAccounts == 0):
@@ -452,11 +474,15 @@ def DBHelp(*void):
         "4: Generate Table Data\n"    \
         "5: Re-Generate Table Data\n"
     )
-def UserHelp(*void):
+def UserHelp(login, *void):
     print("\033[H\033[J", end="")
+    if login:
+        print("Logged in as: \"{} {}\" ({})".format(login[3], login[4], login[1]))
+    else:
+        print("Not logged in")
     print(
         "Options:\n"                    \
-        "0: Back\n"
+        "0: Back\n"                     \
     )
 def AdminHelp(*void):
     print("\033[H\033[J", end="")
@@ -490,6 +516,7 @@ if __name__ == "__main__":
         6: DBHelp
     }
     
+    ActiveUser = []
     UserOptions = {
         1: UserHelp
     }
@@ -522,7 +549,7 @@ if __name__ == "__main__":
     option = StartChoices
     while True:
         maxval = max(option)
-        option.get(maxval, NullFunc)()
+        option.get(maxval, NullFunc)(ActiveUser)
         try:
             cmd = int(input("Enter input (int): "))
             if cmd >= maxval:
