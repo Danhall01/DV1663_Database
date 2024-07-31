@@ -3,7 +3,7 @@ from mysql.connector import errorcode
 import random
 from faker import Faker
 
-#TODO Systems:
+#TODO Systems: maybe?
 # Inventory system
 # Friends system
 
@@ -14,13 +14,12 @@ from faker import Faker
 # Create / Delete Characters
 # Display all characters (n/12 used slots\n...) (Character JOIN server JOIN guild)
 
+# List all guilds (with cap (function))
 # Reserve Guildname (Set active with no members)
 # Create Guild
 # Join Guild
 # Leave Guild
 # Get Guild Information (Amount of players, Online players & Who + their server)
-
-# Collect items (GetRandomItem())
 
 ### ADMIN
 # Deactivate user
@@ -33,6 +32,7 @@ from faker import Faker
 # Make server go up again
 
 VERBAL = False
+MAX_CHARACTERS = 12
 g_dbName = "GameData"
 g_LoadbarCharacter = "█"
 
@@ -237,52 +237,64 @@ def _SafeQuery(session, query, silent=False):
         retCode = -1
     return retCode
 
-def CreateServer(session, connection, sName, capacity=256):
+def CreateServer(session, connection, serverName, capacity=256):
     query = "INSERT INTO Servers VALUES (\"{}\", {}, 0, \"Inactive\");"\
-        "".format(sName, capacity)
+        "".format(serverName, capacity)
     if _SafeQuery(session, query) != 0:
         return -1
     connection.commit()
     return 0
 
-def CreateGuild(session, connection, gName):
+def CreateGuild(session, connection, guildName):
     query = "INSERT INTO Guilds VALUES (\"{}\", 0, 0, False);"\
-        "".format(gName)
+        "".format(guildName)
     if _SafeQuery(session, query) != 0:
         return -1
     connection.commit()
     return 0
 
-def CreateUser(session, connection, username, password, fName, lName):
+def CreateUser(session, connection, username, password, firstName, lastName):
     query = "INSERT INTO Accounts VALUES (0, \"{}\", \"{}\", \"{}\", \"{}\", True);"\
         "".format(
                 username,
                 password,
-                fName,
-                lName,
+                firstName,
+                lastName,
             )
     if _SafeQuery(session, query) != 0:
         return -1
     connection.commit()
     return 0
 
-def CreateCharacter(session, connection, cName, whom, server, className):
+def CreateCharacter(session, connection, characterName, whom, server, className, silent=False):
+    # Check if creation is possible
+    queryCharacterAmount = "SELECT COUNT(*) FROM playercharacters "\
+        "WHERE playercharacters.AccountId = {};"\
+        "".format(whom)
+    if _SafeQuery(session, queryCharacterAmount) != 0:
+        return -1
+    if session.fetchall()[0][0] >= MAX_CHARACTERS:
+        if not silent:
+            print("\r[w]\tUnable to create character, character limit on accout has been reached")
+        return -1
+    
+    # Create Character
     query = "INSERT INTO PlayerCharacters VALUES (\"{}\", {}, \"{}\", {}, {}, {}, \"{}\");"\
         "".format(
-                cName,       # Character name
-                whom,       # Account id
-                server,     # Server
-                "NULL",     # Guild
-                False,      # Logged in
-                1,          # Level
-                className   # Class
+                characterName,  # Character name
+                whom,           # Account id
+                server,         # Server
+                "NULL",         # Guild
+                False,          # Logged in
+                1,              # Level
+                className       # Class
                 )
     if _SafeQuery(session, query, silent=True) != 0:
         return -1
     connection.commit()
     return 0
 
-def LogInCharacter(session, connection, userId, cName, server, silent=False):
+def LogInCharacter(session, connection, userId, characterName, server, silent=False):
     # Check if login is possible
     queryIsLoggedIn = "SELECT COUNT(*) FROM PlayerCharacters "\
                       "WHERE PlayerCharacters.AccountId = {} "\
@@ -312,19 +324,19 @@ def LogInCharacter(session, connection, userId, cName, server, silent=False):
                 "SET PlayerCharacters.IsLoggedIn = True "\
                 "WHERE PlayerCharacters.Name = \"{}\" "\
                 "AND PlayerCharacters.ServerId = \"{}\""\
-                "".format(cName, server)
+                "".format(characterName, server)
     if _SafeQuery(session, queryLogIn) != 0:
         return -1
     connection.commit()
     return 0
 
-def LevelUp(session, connection, cName, server, levels):
+def LevelUp(session, connection, characterName, server, levels):
     query = "UPDATE PlayerCharacters " \
             "SET PlayerCharacters.Level = LEAST(PlayerCharacters.Level + GREATEST(0, {}), 20) "\
             "WHERE PlayerCharacters.Name = \"{}\" AND PlayerCharacters.ServerId = \"{}\";"\
             "".format(
                     levels,
-                    cName,
+                    characterName,
                     server)
     if _SafeQuery(session, query) != 0:
         return -1
@@ -338,8 +350,16 @@ def SetUserStatus(session, connection, userId, active):
     connection.commit()
     return 0
 
-def JoinGuild(session, connection, userId, cName, server, guildName):
-    
+def JoinGuild(session, connection, characterName, server, guildName):
+    query = "UPDATE PlayerCharacters " \
+            "SET PlayerCharacters.GuildId = \"{}\" "    \
+            "WHERE PlayerCharacters.Name = \"{}\" "     \
+            "AND PlayerCharacters.ServerId = \"{}\";"   \
+            "".format(guildName, characterName, server)
+    if _SafeQuery(session, query) != 0:
+        return -1
+    connection.commit()
+    return 0
 
 def CreateDB(session, *void):    
     if _InitDatabase(session) != 0:
@@ -403,6 +423,8 @@ def PopulateTables(session, connection):
     
     numAccounts = random.randint(25, 150)
     for i in range(numAccounts * 20):
+        # uid starts at 2 (1 without admin above)
+        uid = i + 2
         CreateUser(session, connection,
             fData.street_name(),
             fData.password(),
@@ -410,26 +432,28 @@ def PopulateTables(session, connection):
             fData.last_name(),
         )
         if not fData.boolean():
-            SetUserStatus(session, connection, i + 1, False)
+            SetUserStatus(session, connection, uid, False)
 
-        numCharacters = random.randint(1, 12)
+        numCharacters = random.randint(1, MAX_CHARACTERS)
         for _ in range(numCharacters):
             while True:
                 nameChoice = fData.name()
                 serverChoice = random.choice(serverNames)
                 if CreateCharacter(session, connection,
                                   nameChoice, 
-                                  i + 1, 
+                                  uid, 
                                   serverChoice, 
-                                  random.choice(g_Classes)) != 0:
+                                  random.choice(g_Classes),
+                                  silent=True) != 0:
                     continue
                 if LevelUp(session,connection, nameChoice, serverChoice, random.randint(0, 19)) != 0:
                     return -1
-                if fData.boolean():
-                    # Log in or not, it does not really matter here
-                    LogInCharacter(session, connection, i + 1, nameChoice, serverChoice, silent=True)
-                if
                 
+                # Return values here are only relevant to UI
+                if fData.boolean():
+                    LogInCharacter(session, connection, uid, nameChoice, serverChoice, silent=True)
+                if fData.boolean():
+                    JoinGuild(session, connection, nameChoice, serverChoice, random.choice(guildNames))
                 break
                 
         if (i % numAccounts == 0):
