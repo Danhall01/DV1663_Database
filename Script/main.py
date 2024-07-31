@@ -309,8 +309,8 @@ def LevelUp(session, connection, name, server, levels):
     connection.commit()
     return 0
 
-def DisableUser(session, connection, userId):
-    query = "UPDATE Accounts SET Accounts.Active = False WHERE Accounts.Id = {}".format(userId)
+def SetUserStatus(session, connection, userId, active):
+    query = "UPDATE Accounts SET Accounts.Active = {} WHERE Accounts.Id = {}".format(active, userId)
     if _SafeQuery(session, query)!= 0:
         return -1
     connection.commit()
@@ -386,7 +386,7 @@ def PopulateTables(session, connection):
             fData.last_name(),
         )
         if not active:
-            DisableUser(session, connection, i + 1)
+            SetUserStatus(session, connection, i + 1, False)
 
         numCharacters = random.randint(1, 12)
         for _ in range(numCharacters):
