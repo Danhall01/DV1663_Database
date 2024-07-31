@@ -6,6 +6,7 @@ from faker import Faker
 #TODO Systems: maybe?
 # Inventory system
 # Friends system
+# guildscore = SUM(playercharacter.level)
 
 #TODO Anything interesting to look at from program:
 ### USER
@@ -20,6 +21,7 @@ from faker import Faker
 # Join Guild
 # Leave Guild
 # Get Guild Information (Amount of players, Online players & Who + their server)
+# Get Top Guild Information (Players JOIN Guild JOIN Server(guild[Low]:\nPlayers...))
 
 ### ADMIN
 # Deactivate user
@@ -207,7 +209,10 @@ def _InitTriggers(session):
             "ELSEIF NEW.Members > 0 THEN "  \
                 "SET NEW.Active = True;"    \
             "END IF;"                       \
-        "END;"
+        "END;",
+        
+        # When players gain levels, update guild score (if any)
+        
     ]
     retCode = 0
     for query in tQueries:
