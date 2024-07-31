@@ -206,6 +206,11 @@ def _InitTriggers(session):
     return retCode
  
 def _SafeQuery(session, query, silent=False):
+    # Ensure Connection to db
+    if _UseDatabase(session) != 0:
+        return -1
+    
+    # Perform query
     retCode = 0
     try:
         session.execute(query)
@@ -378,14 +383,13 @@ def PopulateTables(session, connection):
     
     numAccounts = random.randint(25, 150)
     for i in range(numAccounts * 20):
-        active = fData.boolean()
         CreateUser(session, connection,
             fData.street_name(),
             fData.password(),
             fData.first_name(),
             fData.last_name(),
         )
-        if not active:
+        if not fData.boolean():
             SetUserStatus(session, connection, i + 1, False)
 
         numCharacters = random.randint(1, 12)
@@ -427,24 +431,51 @@ def ClearData(session, *void):
 
 def NullFunc(*void):
     return
-def PrintHelp(*void):
+def StartHelp(*void):
+    print("\033[H\033[J", end="")
+    print(
+        "Options:\n"              \
+        "0: Quit\n"               \
+        "1: Database Options\n"   \
+        "2: User Options\n"       \
+        "3: Admin Options\n"      \
+        "4: Server Options\n"
+    )
+def DBHelp(*void):
+    print("\033[H\033[J", end="")
     print(
         "Options:\n"                  \
-        "0: Quit\n"                   \
+        "0: Back\n"                   \
         "1: Create Database\n"        \
         "2: Delete Database\n"        \
         "3: Recreate Database\n"      \
         "4: Generate Table Data\n"    \
-        "5: Re-Generate Table Data\n" \
-        "6: Help"
+        "5: Re-Generate Table Data\n"
     )
-
+def UserHelp(*void):
+    print("\033[H\033[J", end="")
+    print(
+        "Options:\n"                    \
+        "0: Back\n"
+    )
+def AdminHelp(*void):
+    print("\033[H\033[J", end="")
+    print(
+        "Options:\n"                    \
+        "0: Back\n"
+    )
+def ServerHelp(*void):
+    print("\033[H\033[J", end="")
+    print(
+        "Options:\n"                    \
+        "0: Back\n"
+    )
 
 if __name__ == "__main__":
     connection = SQLConnect()
     session = connection.cursor()
     
-    switchCase = {
+    DBOptions = {
         # Option "1: Init Database"
         1: CreateDB,
         # Option "2: Delete Database"
@@ -456,20 +487,64 @@ if __name__ == "__main__":
         # Option "5: Re-Generate Data"
         5: RePopulateTables,
         # Option "6: Help"
-        6: PrintHelp
+        6: DBHelp
     }
     
-    PrintHelp()
-    while True:
-        try:
-            cmd = int(input("Enter input: "))
-        except:
-            print("\r[w]\tInvalid Input, try again...")
-            continue
-        if cmd == 0:
-            break
+    UserOptions = {
+        1: UserHelp
+    }
+    
+    AdminOptions = {
+        1: AdminHelp
+    }
+    
+    ServerOptions = {
+        1: ServerHelp
+    }
+    
+    StartChoices = {
+        # Option "1: Modify Database"
+        1: DBOptions,
         
-        switchCase.get(cmd, NullFunc)(session, connection)
+        # Option "2: Login To Account (User)"
+        2: UserOptions,
+        
+        # Option "3: Admin Login"
+        3: AdminOptions,
+        
+        # Option "4: Modify Servers"
+        4: ServerOptions,
+        
+        # Option "5: Help"
+        5: StartHelp
+    }
+    
+    option = StartChoices
+    while True:
+        maxval = max(option)
+        option.get(maxval, NullFunc)()
+        try:
+            cmd = int(input("Enter input (int): "))
+            if cmd >= maxval:
+                raise
+        except:
+            print("\r[w] Invalid Input: Only the displayed arguments are valid input.")
+            input("Press any key to continue...")
+            continue
+        
+        if cmd == 0:
+            if option == StartChoices:
+                break
+            option = StartChoices
+            StartHelp()
+            continue
+        
+        if option == StartChoices and cmd != maxval:
+            option = StartChoices.get(cmd, StartChoices)
+            continue
+        
+        option.get(cmd, NullFunc)(session, connection)
+        input("Press any key to continue...")
 
     session.close()
     connection.close()
