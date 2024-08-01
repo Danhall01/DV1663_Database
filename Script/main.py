@@ -273,7 +273,7 @@ def PopulateTables(session, connection):
     numServers = random.randint(2, 5)
     serverNames = [fData.unique.country() for i in range(numServers * 15)]
     for i, name in enumerate(serverNames):
-        if CreateServer(session, connection, name, random.randint(64, 256)) != 0:
+        if CreateServer(session, connection, name, random.randint(64, 256), silent=True) != 0:
             return -1
         if i % numServers == 0:
             print("{}".format(g_LoadbarCharacter), end="", flush=True)
@@ -344,6 +344,20 @@ def ClearData(session, *void):
         return -1
 # ================================================== ==================================================
 
+# ======================= Helper functions
+def Fallthrough(arg):
+    return arg
+def GetInput_s(inputstr, castfunc=Fallthrough):
+    value = 0
+    while True:
+        try:
+            value = castfunc(input(inputstr))
+            if value == None:
+                raise
+            break
+        except:
+            print("Invalid input, try again")
+    return value
 
 # ======================= User
 ### USER
@@ -416,13 +430,17 @@ def LogInCharacter(session, connection, userId, characterName, server, silent=Fa
             print("\r[w]\tCould not log in, character is already online on this account")
         return -1
 
-    queryServerCapacity = "SELECT Servers.Capacity, Servers.ActivePlayers "\
+    queryServerCapacity = "SELECT Servers.Capacity, Servers.ActivePlayers, Servers.Status "\
                           "FROM Servers "\
                           "WHERE Servers.Name = \"{}\";"\
                           "".format(server)
     if _SafeQuery(session, queryServerCapacity) != 0:
         return -1
-    capacity, players = session.fetchall()[0]
+    capacity, players, status = session.fetchall()[0]
+    if status == "Maintenance":
+        if not silent:
+            print("\r[w]\tCould not log in, server \"{}\" is currently in Maintenance mode".format(server))
+        return -1
     if players + 1 > capacity:
         if not silent:
             print("\r[w]\tCould not log in, server \"{}\" is currently full".format(server))
@@ -492,14 +510,93 @@ def SetUserStatus(session, connection, userId, active):
 # Delete Server
 # Make server go down / into maintinance
 # Make server go up again
-def CreateServer(session, connection, serverName, capacity=256):
+def ListServers(session, *void):
+    query = "SELECT Name, Status FROM Servers;"
+    if _SafeQuery(session, query) != 0:
+        return -1
+    li = session.fetchall()
+    maxlen = max(len(server[0]) for server in li)
+    for server in li:
+        print("\rName: {}\tStatus: {}"\
+            "".format(server[0].ljust(maxlen + 1), server[1]))
+    return 0
+
+def CreateServer(session, connection, serverName=None, capacity=256, silent=False):
+    if serverName == None:
+        serverName = GetInput_s("Enter server name: ")
+    
     query = "INSERT INTO Servers VALUES (\"{}\", {}, 0, \"Inactive\");"\
         "".format(serverName, capacity)
     if _SafeQuery(session, query) != 0:
         return -1
     connection.commit()
+    if not silent:
+        print("\r[+]\tCreated server \"{}\"".format(serverName))
     return 0
 
+def DeleteServer(session, connection, serverName=None, silent=False):
+    if serverName == None:
+        serverName = GetInput_s("Enter server name: ")
+        confirm = GetInput_s(
+            "WARNING: Server \"{}\" and all accociated players will be deleted, continue? (y/n): "\
+                "".format(serverName)
+                , lambda arg : arg if arg == "y" or arg == "n" else None)
+        if confirm == "n":
+            return -1
+    
+    # Clear server from players
+    queryClear = "DELETE FROM Playercharacters WHERE Playercharacters.ServerId = \"{}\";"\
+                "".format(serverName)
+    if _SafeQuery(session, queryClear) != 0:
+        return -1
+    connection.commit()
+    
+    # Delete server
+    query = "DELETE FROM Servers WHERE Servers.Name = \"{}\";"\
+        "".format(serverName)
+    if _SafeQuery(session, query) != 0:
+        return -1
+    connection.commit()
+    if not silent:
+        print("\r[+]\tDeleted server \"{}\"".format(serverName))
+    return 0
+
+def SetServerStatus(session, connection, serverName=None, silent=False):
+    if serverName == None:
+        serverName = GetInput_s("Enter server name: ")
+
+    # Get server status
+    queryStatus = "SELECT Status FROM Servers WHERE Servers.Name = \"{}\""\
+                  "".format(serverName)
+    if _SafeQuery(session, queryStatus) != 0:
+        return -1
+    try:
+        status = session.fetchall()[0][0]
+    except:
+        if not silent:
+            print("\r[w]\tCould not connect to server \"{}\", maybe check spelling?".format(serverName))
+        return -1
+
+    newStatus = "Maintenance" if status != "Maintenance" else "Inactive"
+    
+    # Log out every active player on server
+    if newStatus == "Maintenance":
+        queryLogout = "UPDATE PlayerCharacters SET PlayerCharacters.IsLoggedIn = False WHERE PlayerCharacters.ServerId = \"{}\";"\
+            "".format(serverName)
+        if _SafeQuery(session, queryLogout) != 0:
+            return -1
+        if not silent:
+            print("\r[+]\tSuccessfully logged out every player on \"{}\"".format(serverName))
+    
+    # Change status
+    query = "UPDATE Servers SET Servers.Status = \"{}\" WHERE Servers.Name = \"{}\";"\
+        "".format(newStatus, serverName)
+    if _SafeQuery(session, query) != 0:
+        return -1
+    connection.commit()
+    if not silent:
+        print("\r[+]\tServer \"{}\": status is now \"{}\"".format(serverName, newStatus))
+    return 0
 
 # ======================= Print
 def NullFunc(*void):
@@ -544,8 +641,12 @@ def AdminHelp(*void):
 def ServerHelp(*void):
     print("\033[H\033[J", end="")
     print(
-        "Options:\n"                    \
-        "0: Back\n"
+        "Options:\n"\
+        "0: Back\n" \
+        "1: List all servers\n"\
+        "2: Create Server\n"\
+        "3: Delete Server\n"\
+        "4: Toggle Maintenance Mode\n"
     )
 
 # ======================= Main
@@ -578,7 +679,11 @@ if __name__ == "__main__":
     }
     
     ServerOptions = {
-        1: ServerHelp
+        1: ListServers,
+        2: CreateServer,
+        3: DeleteServer,
+        4: SetServerStatus,
+        5: ServerHelp
     }
     
     StartChoices = {
