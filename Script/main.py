@@ -505,11 +505,6 @@ def SetUserStatus(session, connection, userId, active):
     return 0
 
 # ======================= Server
-### SERVER
-# Create Server
-# Delete Server
-# Make server go down / into maintinance
-# Make server go up again
 def ListServers(session, *void):
     query = "SELECT Name, Status FROM Servers;"
     if _SafeQuery(session, query) != 0:
