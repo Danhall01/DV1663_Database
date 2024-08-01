@@ -4,23 +4,23 @@ import random
 from faker import Faker
 
 #TODO Systems: maybe?
-# Inventory system
-# Friends system
-# guildscore = SUM(playercharacter.level)
+#? Inventory system
+#? Friends system
 
 #TODO Anything interesting to look at from program:
 ### USER
-# Set Active account (Program)
+# Login to Account (enter user + pass)
+# Create Account
 # Activate / Deactivate Account
 # Create / Delete Characters
 # Display all characters (n/12 used slots\n...) (Character JOIN server JOIN guild)
 
-# List all guilds (with cap (function))
+# List all guilds (with cap (function), incremental (5 at a time))
 # Reserve Guildname (Set active with no members)
 # Create Guild
 # Join Guild
 # Leave Guild
-# Get Guild Information (Amount of players, Online players & Who + their server)
+# Get My Guild Information (Amount of players, Online players & Who + their server)
 # Get Top Guild Information (Players JOIN Guild JOIN Server(guild[Low]:\nPlayers...))
 
 ### ADMIN
@@ -30,6 +30,8 @@ from faker import Faker
 # Delete inactive guilds
 
 ### SERVER
+# Create Server
+# Delete Server
 # Make server go down / into maintinance
 # Make server go up again
 
@@ -211,8 +213,21 @@ def _InitTriggers(session):
             "END IF;"                       \
         "END;",
         
-        # When players gain levels, update guild score (if any)
-        
+        # Update guild score when players level up and / or join/leave a guild
+        "CREATE TRIGGER guildScoreUpdate "          \
+        "AFTER UPDATE ON PlayerCharacters "         \
+        "FOR EACH ROW "                             \
+        "BEGIN "                                    \
+            "UPDATE Guilds g "                      \
+            "SET g.score = ( "                      \
+                "SELECT COALESCE(SUM(Level), 0) "   \
+                "FROM PlayerCharacters "            \
+                "WHERE GuildId = NEW.GuildId "      \
+                "OR GuildId = OLD.GuildId "         \
+            ") * 2 "                                \
+            "WHERE g.Name = NEW.GuildId "           \
+            "OR g.Name = OLD.GuildId;"              \
+        "END;"
     ]
     retCode = 0
     for query in tQueries:
@@ -480,6 +495,18 @@ def ClearData(session, *void):
         return -1
 # ================================================== ==================================================
 
+
+# ======================= User
+
+
+
+# ======================= Admin
+
+# ======================= Server
+
+
+
+# ======================= Print
 def NullFunc(*void):
     return
 def StartHelp(*void):
@@ -526,6 +553,7 @@ def ServerHelp(*void):
         "0: Back\n"
     )
 
+# ======================= Main
 if __name__ == "__main__":
     connection = SQLConnect()
     session = connection.cursor()
