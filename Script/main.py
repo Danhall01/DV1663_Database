@@ -7,33 +7,6 @@ from faker import Faker
 #? Inventory system
 #? Friends system
 
-#TODO Anything interesting to look at from program:
-### USER
-# Login to Account (enter user + pass)
-# Create Account
-# Activate / Deactivate Account
-# Create / Delete Characters
-# Display all characters (n/12 used slots\n...) (Character JOIN server JOIN guild)
-
-# List all guilds (with cap (function), incremental (5 at a time))
-# Reserve Guildname (Set active with no members)
-# Create Guild
-# Join Guild
-# Leave Guild
-# Get My Guild Information (Amount of players, Online players & Who + their server)
-# Get Top Guild Information (Players JOIN Guild JOIN Server(guild[Low]:\nPlayers...))
-
-### ADMIN
-# Deactivate user
-# Activate user
-# Shut down guild (kill)
-# Delete inactive guilds
-
-### SERVER
-# Create Server
-# Delete Server
-# Make server go down / into maintinance
-# Make server go up again
 
 VERBAL = False
 MAX_CHARACTERS = 12
@@ -257,130 +230,6 @@ def _SafeQuery(session, query, silent=False):
         retCode = -1
     return retCode
 
-def CreateServer(session, connection, serverName, capacity=256):
-    query = "INSERT INTO Servers VALUES (\"{}\", {}, 0, \"Inactive\");"\
-        "".format(serverName, capacity)
-    if _SafeQuery(session, query) != 0:
-        return -1
-    connection.commit()
-    return 0
-
-def CreateGuild(session, connection, guildName):
-    query = "INSERT INTO Guilds VALUES (\"{}\", 0, 0, False);"\
-        "".format(guildName)
-    if _SafeQuery(session, query) != 0:
-        return -1
-    connection.commit()
-    return 0
-
-def CreateUser(session, connection, username, password, firstName, lastName):
-    query = "INSERT INTO Accounts VALUES (0, \"{}\", \"{}\", \"{}\", \"{}\", True);"\
-        "".format(
-                username,
-                password,
-                firstName,
-                lastName,
-            )
-    if _SafeQuery(session, query) != 0:
-        return -1
-    connection.commit()
-    return 0
-
-def CreateCharacter(session, connection, characterName, whom, server, className, silent=False):
-    # Check if creation is possible
-    queryCharacterAmount = "SELECT COUNT(*) FROM playercharacters "\
-        "WHERE playercharacters.AccountId = {};"\
-        "".format(whom)
-    if _SafeQuery(session, queryCharacterAmount) != 0:
-        return -1
-    if session.fetchall()[0][0] >= MAX_CHARACTERS:
-        if not silent:
-            print("\r[w]\tUnable to create character, character limit on accout has been reached")
-        return -1
-    
-    # Create Character
-    query = "INSERT INTO PlayerCharacters VALUES (\"{}\", {}, \"{}\", {}, {}, {}, \"{}\");"\
-        "".format(
-                characterName,  # Character name
-                whom,           # Account id
-                server,         # Server
-                "NULL",         # Guild
-                False,          # Logged in
-                1,              # Level
-                className       # Class
-                )
-    if _SafeQuery(session, query, silent=True) != 0:
-        return -1
-    connection.commit()
-    return 0
-
-def LogInCharacter(session, connection, userId, characterName, server, silent=False):
-    # Check if login is possible
-    queryIsLoggedIn = "SELECT COUNT(*) FROM PlayerCharacters "\
-                      "WHERE PlayerCharacters.AccountId = {} "\
-                      "AND PlayerCharacters.IsLoggedIn = True;"\
-                      "".format(userId)
-    if _SafeQuery(session, queryIsLoggedIn) != 0:
-        return -1
-    if session.fetchall()[0][0] > 0:
-        if not silent:
-            print("\r[w]\tCould not log in, character is already online on this account")
-        return -1
-
-    queryServerCapacity = "SELECT Servers.Capacity, Servers.ActivePlayers "\
-                          "FROM Servers "\
-                          "WHERE Servers.Name = \"{}\";"\
-                          "".format(server)
-    if _SafeQuery(session, queryServerCapacity) != 0:
-        return -1
-    capacity, players = session.fetchall()[0]
-    if players + 1 > capacity:
-        if not silent:
-            print("\r[w]\tCould not log in, server \"{}\" is currently full".format(server))
-        return -1
-    
-    # Log In
-    queryLogIn = "UPDATE PlayerCharacters "\
-                "SET PlayerCharacters.IsLoggedIn = True "\
-                "WHERE PlayerCharacters.Name = \"{}\" "\
-                "AND PlayerCharacters.ServerId = \"{}\""\
-                "".format(characterName, server)
-    if _SafeQuery(session, queryLogIn) != 0:
-        return -1
-    connection.commit()
-    return 0
-
-def LevelUp(session, connection, characterName, server, levels):
-    query = "UPDATE PlayerCharacters " \
-            "SET PlayerCharacters.Level = LEAST(PlayerCharacters.Level + GREATEST(0, {}), 20) "\
-            "WHERE PlayerCharacters.Name = \"{}\" AND PlayerCharacters.ServerId = \"{}\";"\
-            "".format(
-                    levels,
-                    characterName,
-                    server)
-    if _SafeQuery(session, query) != 0:
-        return -1
-    connection.commit()
-    return 0
-
-def SetUserStatus(session, connection, userId, active):
-    query = "UPDATE Accounts SET Accounts.Active = {} WHERE Accounts.Id = {}".format(active, userId)
-    if _SafeQuery(session, query)!= 0:
-        return -1
-    connection.commit()
-    return 0
-
-def JoinGuild(session, connection, characterName, server, guildName):
-    query = "UPDATE PlayerCharacters " \
-            "SET PlayerCharacters.GuildId = \"{}\" "    \
-            "WHERE PlayerCharacters.Name = \"{}\" "     \
-            "AND PlayerCharacters.ServerId = \"{}\";"   \
-            "".format(guildName, characterName, server)
-    if _SafeQuery(session, query) != 0:
-        return -1
-    connection.commit()
-    return 0
-
 def CreateDB(session, *void):    
     if _InitDatabase(session) != 0:
         return -1
@@ -497,18 +346,164 @@ def ClearData(session, *void):
 
 
 # ======================= User
+### USER
+# Login to Account (enter user + pass)
+# Create Account
+# Activate / Deactivate Account
+# Create / Delete Characters
+# Display all characters (n/12 used slots\n...) (Character JOIN server JOIN guild)
+
+# List all guilds (with cap (function), incremental (5 at a time))
+# Reserve Guildname (Set active with no members)
+# Create Guild
+# Join Guild
+# Leave Guild
+# Get My Guild Information (Amount of players, Online players & Who + their server)
+# Get Top Guild Information (Players JOIN Guild JOIN Server(guild[Low]:\nPlayers...))
+
+def CreateUser(session, connection, username, password, firstName, lastName):
+    query = "INSERT INTO Accounts VALUES (0, \"{}\", \"{}\", \"{}\", \"{}\", True);"\
+        "".format(
+                username,
+                password,
+                firstName,
+                lastName,
+            )
+    if _SafeQuery(session, query) != 0:
+        return -1
+    connection.commit()
+    return 0
 
 
+def CreateCharacter(session, connection, characterName, whom, server, className, silent=False):
+    # Check if creation is possible
+    queryCharacterAmount = "SELECT COUNT(*) FROM playercharacters "\
+        "WHERE playercharacters.AccountId = {};"\
+        "".format(whom)
+    if _SafeQuery(session, queryCharacterAmount) != 0:
+        return -1
+    if session.fetchall()[0][0] >= MAX_CHARACTERS:
+        if not silent:
+            print("\r[w]\tUnable to create character, character limit on accout has been reached")
+        return -1
+    
+    # Create Character
+    query = "INSERT INTO PlayerCharacters VALUES (\"{}\", {}, \"{}\", {}, {}, {}, \"{}\");"\
+        "".format(
+                characterName,  # Character name
+                whom,           # Account id
+                server,         # Server
+                "NULL",         # Guild
+                False,          # Logged in
+                1,              # Level
+                className       # Class
+                )
+    if _SafeQuery(session, query, silent=True) != 0:
+        return -1
+    connection.commit()
+    return 0
+
+def LogInCharacter(session, connection, userId, characterName, server, silent=False):
+    # Check if login is possible
+    queryIsLoggedIn = "SELECT COUNT(*) FROM PlayerCharacters "\
+                      "WHERE PlayerCharacters.AccountId = {} "\
+                      "AND PlayerCharacters.IsLoggedIn = True;"\
+                      "".format(userId)
+    if _SafeQuery(session, queryIsLoggedIn) != 0:
+        return -1
+    if session.fetchall()[0][0] > 0:
+        if not silent:
+            print("\r[w]\tCould not log in, character is already online on this account")
+        return -1
+
+    queryServerCapacity = "SELECT Servers.Capacity, Servers.ActivePlayers "\
+                          "FROM Servers "\
+                          "WHERE Servers.Name = \"{}\";"\
+                          "".format(server)
+    if _SafeQuery(session, queryServerCapacity) != 0:
+        return -1
+    capacity, players = session.fetchall()[0]
+    if players + 1 > capacity:
+        if not silent:
+            print("\r[w]\tCould not log in, server \"{}\" is currently full".format(server))
+        return -1
+    
+    # Log In
+    queryLogIn = "UPDATE PlayerCharacters "\
+                "SET PlayerCharacters.IsLoggedIn = True "\
+                "WHERE PlayerCharacters.Name = \"{}\" "\
+                "AND PlayerCharacters.ServerId = \"{}\""\
+                "".format(characterName, server)
+    if _SafeQuery(session, queryLogIn) != 0:
+        return -1
+    connection.commit()
+    return 0
+
+
+def LevelUp(session, connection, characterName, server, levels):
+    query = "UPDATE PlayerCharacters " \
+            "SET PlayerCharacters.Level = LEAST(PlayerCharacters.Level + GREATEST(0, {}), 20) "\
+            "WHERE PlayerCharacters.Name = \"{}\" AND PlayerCharacters.ServerId = \"{}\";"\
+            "".format(
+                    levels,
+                    characterName,
+                    server)
+    if _SafeQuery(session, query) != 0:
+        return -1
+    connection.commit()
+    return 0
+
+
+def CreateGuild(session, connection, guildName):
+    query = "INSERT INTO Guilds VALUES (\"{}\", 0, 0, False);"\
+        "".format(guildName)
+    if _SafeQuery(session, query) != 0:
+        return -1
+    connection.commit()
+    return 0
+
+def JoinGuild(session, connection, characterName, server, guildName):
+    query = "UPDATE PlayerCharacters " \
+            "SET PlayerCharacters.GuildId = \"{}\" "    \
+            "WHERE PlayerCharacters.Name = \"{}\" "     \
+            "AND PlayerCharacters.ServerId = \"{}\";"   \
+            "".format(guildName, characterName, server)
+    if _SafeQuery(session, query) != 0:
+        return -1
+    connection.commit()
+    return 0
 
 # ======================= Admin
+### ADMIN
+# Deactivate user
+# Activate user
+# Shut down guild (kill)
+# Delete inactive guilds
+def SetUserStatus(session, connection, userId, active):
+    query = "UPDATE Accounts SET Accounts.Active = {} WHERE Accounts.Id = {}".format(active, userId)
+    if _SafeQuery(session, query)!= 0:
+        return -1
+    connection.commit()
+    return 0
 
 # ======================= Server
-
+### SERVER
+# Create Server
+# Delete Server
+# Make server go down / into maintinance
+# Make server go up again
+def CreateServer(session, connection, serverName, capacity=256):
+    query = "INSERT INTO Servers VALUES (\"{}\", {}, 0, \"Inactive\");"\
+        "".format(serverName, capacity)
+    if _SafeQuery(session, query) != 0:
+        return -1
+    connection.commit()
+    return 0
 
 
 # ======================= Print
 def NullFunc(*void):
-    return
+    pass
 def StartHelp(*void):
     print("\033[H\033[J", end="")
     print(
