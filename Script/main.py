@@ -24,7 +24,8 @@ g_Classes = [
             "Barbarian",
             "Druid"
 ]
-
+g_activeUser = []
+g_currentCharacter = []
 
 def SQLConnect():
     return sql.connect(
@@ -287,21 +288,21 @@ def PopulateTables(session, connection):
             print("{}".format(g_LoadbarCharacter), end="", flush=True)
     
     # Insert Admin Account
-    if CreateUser(session, connection, "Admin", "Root", "Daniel", "Häll") != 0:
+    if CreateAccount(session, connection, "Admin", "Root", "Daniel", "Häll") != 0:
         return -1
     
     numAccounts = random.randint(25, 150)
     for i in range(numAccounts * 20):
         # uid starts at 2 (1 without admin above)
         uid = i + 2
-        CreateUser(session, connection,
+        CreateAccount(session, connection,
             fData.street_name(),
             fData.password(),
             fData.first_name(),
             fData.last_name(),
         )
         if not fData.boolean():
-            SetUserStatus(session, connection, uid, False)
+            SetUserStatus(session, connection, uid, False, silent=True)
 
         numCharacters = random.randint(1, MAX_CHARACTERS)
         for _ in range(numCharacters):
@@ -347,6 +348,8 @@ def ClearData(session, *void):
 # ======================= Helper functions
 def Fallthrough(arg):
     return arg
+def NullFunc(*void):
+    pass
 def GetInput_s(inputstr, castfunc=Fallthrough):
     value = 0
     while True:
@@ -360,22 +363,59 @@ def GetInput_s(inputstr, castfunc=Fallthrough):
     return value
 
 # ======================= User
-### USER
-# Login to Account (enter user + pass)
-# Create Account
-# Activate / Deactivate Account
-# Create / Delete Characters
-# Display all characters (n/12 used slots\n...) (Character JOIN server JOIN guild)
+def LogInAccount(session, connection, userId=None, userName=None, password=None, silent=False):
+    if userName == None:
+        userName = GetInput_s("Enter Username: ")
+    if userId == None:
+        userId = GetInput_s("Enter User Id (Digits after '#'): ", int)
+    if password == None:
+        password = GetInput_s("Enter Password: ")
+    
+    query = "SELECT * FROM Accounts "\
+        "WHERE Accounts.Id = {} "\
+        "AND Accounts.Username = \"{}\" "\
+        "AND Accounts.Password = \"{}\";"\
+        "".format(userId, userName, password)
+    if _SafeQuery(session, query) != 0:
+        return -1
+    
+    global g_activeUser
+    result = session.fetchall()
+    if not result or len(result) > 1:
+        if not silent:
+            print("\r[-]\tInvalid username or password")
+        return -1
+    g_activeUser = result[0]
+    
+    if not silent:
+        print("\r[+]\tSuccessfully logged in to user {}#{}".format(g_activeUser[1], g_activeUser[0]))
+    return 0
 
-# List all guilds (with cap (function), incremental (5 at a time))
-# Reserve Guildname (Set active with no members)
-# Create Guild
-# Join Guild
-# Leave Guild
-# Get My Guild Information (Amount of players, Online players & Who + their server)
-# Get Top Guild Information (Players JOIN Guild JOIN Server(guild[Low]:\nPlayers...))
-
-def CreateUser(session, connection, username, password, firstName, lastName):
+def CreateAccount(session, connection, username=None, password=None, firstName=None, lastName=None, silent=False):
+    while True:
+        if username == None:
+            username = GetInput_s("Enter Username: ")
+        if password == None:
+            password = GetInput_s("Enter Password: ")
+        if firstName == None:
+            firstName = GetInput_s("Enter First Name: ")
+        if lastName == None:
+            lastName = GetInput_s("Enter Last Name: ")
+        print("\033[H\033[J", end="")
+        if GetInput_s("Is this information correct?\n"\
+                      "Username: {}\n"\
+                      "Password: {}\n"\
+                      "First Name: {}\n"\
+                      "Last Name: {}\n"\
+                      "Confirm (y/n): "\
+                        "".format(username, password, firstName, lastName),
+                      lambda arg : arg if arg == "y" or arg == "n" else None) == 'n':
+            username = None
+            password = None
+            firstName = None
+            lastName = None
+        break
+    
     query = "INSERT INTO Accounts VALUES (0, \"{}\", \"{}\", \"{}\", \"{}\", True);"\
         "".format(
                 username,
@@ -386,14 +426,23 @@ def CreateUser(session, connection, username, password, firstName, lastName):
     if _SafeQuery(session, query) != 0:
         return -1
     connection.commit()
+    
+    queryUpdateUserLocal = "SELECT * FROM Accounts ORDER BY Id DESC LIMIT 1;"
+    if _SafeQuery(session, queryUpdateUserLocal) != 0:
+        return -1
+    global g_activeUser
+    g_activeUser = session.fetchall()[0]
+    if not silent:
+        print("\r[+]\tSuccessfully created User {}#{}".format(g_activeUser[1], g_activeUser[0]))
+        print("\r[+]\tSuccessfully logged in to user {}#{}".format(g_activeUser[1], g_activeUser[0]))
     return 0
 
-
-def CreateCharacter(session, connection, characterName, whom, server, className, silent=False):
+# Create / Delete Characters
+def CreateCharacter(session, connection, userId, characterName, server, className, silent=False):
     # Check if creation is possible
     queryCharacterAmount = "SELECT COUNT(*) FROM playercharacters "\
         "WHERE playercharacters.AccountId = {};"\
-        "".format(whom)
+        "".format(userId)
     if _SafeQuery(session, queryCharacterAmount) != 0:
         return -1
     if session.fetchall()[0][0] >= MAX_CHARACTERS:
@@ -405,7 +454,7 @@ def CreateCharacter(session, connection, characterName, whom, server, className,
     query = "INSERT INTO PlayerCharacters VALUES (\"{}\", {}, \"{}\", {}, {}, {}, \"{}\");"\
         "".format(
                 characterName,  # Character name
-                whom,           # Account id
+                userId,           # Account id
                 server,         # Server
                 "NULL",         # Guild
                 False,          # Logged in
@@ -416,6 +465,9 @@ def CreateCharacter(session, connection, characterName, whom, server, className,
         return -1
     connection.commit()
     return 0
+
+def DeleteCharacter(session, connection, characterName, server, silent=False):
+    pass
 
 def LogInCharacter(session, connection, userId, characterName, server, silent=False):
     # Check if login is possible
@@ -457,6 +509,54 @@ def LogInCharacter(session, connection, userId, characterName, server, silent=Fa
     connection.commit()
     return 0
 
+# Display all characters (n/12 used slots\n...) (Character JOIN server JOIN guild)
+def DisplayAllCharactersAccount(session, void, userId):
+    pass
+
+# List all guilds (with cap (function), incremental (5 at a time))
+def ListGuilds(session, *void):
+    pass
+
+def SearchGuild(session, void, guildName):
+    pass
+
+# Reserve Guildname (Set active with no members)
+def ReserveGuildName(session, connection, guildName):
+    pass
+
+# Create Guild
+def CreateGuild(session, connection, guildName):
+    query = "INSERT INTO Guilds VALUES (\"{}\", 0, 0, False);"\
+        "".format(guildName)
+    if _SafeQuery(session, query) != 0:
+        return -1
+    connection.commit()
+    return 0
+
+# Join Guild
+def JoinGuild(session, connection, characterName, server, guildName):
+    query = "UPDATE PlayerCharacters " \
+            "SET PlayerCharacters.GuildId = \"{}\" "    \
+            "WHERE PlayerCharacters.Name = \"{}\" "     \
+            "AND PlayerCharacters.ServerId = \"{}\";"   \
+            "".format(guildName, characterName, server)
+    if _SafeQuery(session, query) != 0:
+        return -1
+    connection.commit()
+    return 0
+
+# Leave Guild
+def LeaveGuild(session, connection, characterName, server, guildName):
+    pass
+
+# Get My Guild Information (Amount of players, Online players & Who + their server)
+def ListGuildMembers(session, void, guildName):
+    pass
+
+# Get Top Guild Information (Players JOIN Guild JOIN Server(guild[Low]:\nPlayers...))
+def ListTopGuild(session, *void):
+    pass
+
 
 def LevelUp(session, connection, characterName, server, levels):
     query = "UPDATE PlayerCharacters " \
@@ -472,36 +572,63 @@ def LevelUp(session, connection, characterName, server, levels):
     return 0
 
 
-def CreateGuild(session, connection, guildName):
-    query = "INSERT INTO Guilds VALUES (\"{}\", 0, 0, False);"\
-        "".format(guildName)
-    if _SafeQuery(session, query) != 0:
-        return -1
-    connection.commit()
-    return 0
-
-def JoinGuild(session, connection, characterName, server, guildName):
-    query = "UPDATE PlayerCharacters " \
-            "SET PlayerCharacters.GuildId = \"{}\" "    \
-            "WHERE PlayerCharacters.Name = \"{}\" "     \
-            "AND PlayerCharacters.ServerId = \"{}\";"   \
-            "".format(guildName, characterName, server)
-    if _SafeQuery(session, query) != 0:
-        return -1
-    connection.commit()
-    return 0
-
 # ======================= Admin
-### ADMIN
-# Deactivate user
-# Activate user
-# Shut down guild (kill)
-# Delete inactive guilds
-def SetUserStatus(session, connection, userId, active):
+def SetUserStatus(session, connection, userId=None, active=None, silent=False):
+    if userId == None:
+        userId = GetInput_s("Enter UserId (int): ", int)
+        active = GetInput_s("Enter active status (1-active, 0-disabled): ", lambda arg: int(arg) if int(arg) == 0 or int(arg) == 1 else None)
+    
     query = "UPDATE Accounts SET Accounts.Active = {} WHERE Accounts.Id = {}".format(active, userId)
     if _SafeQuery(session, query)!= 0:
         return -1
     connection.commit()
+    if not silent:
+        print("Changed user {}'s active status to {}".format(userId, "Inactive" if active == 0 else "Active"))
+    return 0
+
+def PurgeGuild(session, connection, guildName=None, silent=False):
+    if guildName == None:
+        guildName = GetInput_s("Enter Guild Name: ")
+        confirm = GetInput_s(
+            "WARNING: All members of guild \"{}\" will be removed and guild will become inactive, continue? (y/n): "\
+                "".format(guildName)
+                , lambda arg : arg if arg == "y" or arg == "n" else None)
+        if confirm == "n":
+            return -1
+    
+    query = "UPDATE PlayerCharacters SET PlayerCharacters.GuildId = NULL WHERE PlayerCharacters.GuildId = \"{}\";"\
+        "".format(guildName)
+    if _SafeQuery(session, query) != 0:
+        return -1
+    connection.commit()
+    if not silent:
+        print("\r[+]\tSuccessfully removed all players from guild \"{}\", guild is now Inactive. Use command \"Clean Guild Data\" to remove entry".format(guildName))
+    return 0
+
+def CleanGuildsData(session, connection, silent=False):
+    queryCount = "SELECT COUNT(*) FROM Guilds WHERE Guilds.Active = False;"
+    if _SafeQuery(session, queryCount) != 0:
+        return -1
+    try:
+        count = session.fetchall()[0][0]
+    except:
+        count = 0
+    if count == 0:
+        return -1
+    
+    confirm = GetInput_s(
+        "WARNING: All {} inactive guilds will be cleaned from the database, continue? (y/n): "\
+            "".format(count)
+            , lambda arg : arg if arg == "y" or arg == "n" else None)
+    if confirm == "n":
+        return -1
+    
+    query = "DELETE FROM Guilds WHERE Guilds.Active = False;"
+    if _SafeQuery(session, query) != 0:
+        return -1
+    connection.commit()
+    if not silent:
+        print("\r[+]\tSuccessfully cleaned up inactive guilds")
     return 0
 
 # ======================= Server
@@ -565,11 +692,14 @@ def SetServerStatus(session, connection, serverName=None, silent=False):
                   "".format(serverName)
     if _SafeQuery(session, queryStatus) != 0:
         return -1
+    fail = False
     try:
         status = session.fetchall()[0][0]
     except:
         if not silent:
             print("\r[w]\tCould not connect to server \"{}\", maybe check spelling?".format(serverName))
+        fail = True
+    if fail:
         return -1
 
     newStatus = "Maintenance" if status != "Maintenance" else "Inactive"
@@ -594,8 +724,6 @@ def SetServerStatus(session, connection, serverName=None, silent=False):
     return 0
 
 # ======================= Print
-def NullFunc(*void):
-    pass
 def StartHelp(*void):
     print("\033[H\033[J", end="")
     print(
@@ -620,18 +748,38 @@ def DBHelp(*void):
 def UserHelp(login, *void):
     print("\033[H\033[J", end="")
     if login:
-        print("Logged in as: \"{} {}\" ({})".format(login[3], login[4], login[1]))
+        print("Logged in as: \"{} {}\" ({}#{})".format(login[3], login[4], login[1], login[0]))
     else:
         print("Not logged in")
     print(
-        "Options:\n"                    \
-        "0: Back\n"                     \
+        "Options:\n"\
+        "0: Back\n" \
+        "1: Login to Account\n"\
+        "2: Create Account\n"\
+            "\n"\
+        "(Requires login):\n"
+        "3: Create Character\n"\
+        "4: Delete Character\n"\
+        "5: Login to Character\n"\
+        "6: Display all Characters on Account\n"\
+            "\n"\
+        "7: List all Guilds\n"\
+        "8: Search for Guild\n"\
+        "9: Reserve Guild Name\n"\
+        "10: Create Guild\n"\
+        "11: Join Guild\n"\
+        "12: Leave Guild\n"\
+        "13: List all Guild Member Characters\n"\
+        "14: List Top Guild\n"
     )
 def AdminHelp(*void):
     print("\033[H\033[J", end="")
     print(
-        "Options:\n"                    \
-        "0: Back\n"
+        "Options:\n"\
+        "0: Back\n"\
+        "1: Set User Status\n"\
+        "2: Purge Guild\n"\
+        "3: Clean Guild Data\n"
     )
 def ServerHelp(*void):
     print("\033[H\033[J", end="")
@@ -663,16 +811,32 @@ if __name__ == "__main__":
         # Option "6: Help"
         6: DBHelp
     }
-    
-    ActiveUser = []
     UserOptions = {
-        1: UserHelp
+        1: LogInAccount,
+        2: CreateAccount,
+        
+        3: CreateCharacter,
+        4: DeleteCharacter,
+        5: LogInCharacter,
+        6: DisplayAllCharactersAccount,
+        
+        7: ListGuilds,
+        8: SearchGuild,
+        9: ReserveGuildName,
+        10: CreateGuild,
+        11: JoinGuild,
+        12: LeaveGuild,
+        13: ListGuildMembers,
+        14: ListTopGuild,
+        
+        15: UserHelp
     }
-    
     AdminOptions = {
-        1: AdminHelp
+        1: SetUserStatus,
+        2: PurgeGuild,
+        3: CleanGuildsData,
+        4: AdminHelp
     }
-    
     ServerOptions = {
         1: ListServers,
         2: CreateServer,
@@ -680,7 +844,6 @@ if __name__ == "__main__":
         4: SetServerStatus,
         5: ServerHelp
     }
-    
     StartChoices = {
         # Option "1: Modify Database"
         1: DBOptions,
@@ -701,7 +864,7 @@ if __name__ == "__main__":
     option = StartChoices
     while True:
         maxval = max(option)
-        option.get(maxval, NullFunc)(ActiveUser)
+        option.get(maxval, NullFunc)(g_activeUser)
         try:
             cmd = int(input("Enter input (int): "))
             if cmd >= maxval:
