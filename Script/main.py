@@ -364,7 +364,7 @@ def GetInput_s(inputstr, castfunc=Fallthrough):
     return value
 
 # ======================= User
-def LogInAccount(session, connection, userId=None, userName=None, password=None, silent=False):
+def LogInAccount(session, void, userId=None, userName=None, password=None, silent=False):
     if userName == None:
         userName = GetInput_s("Enter Username: ")
     if userId == None:
