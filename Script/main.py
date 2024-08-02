@@ -25,7 +25,6 @@ g_classes = [
             "Druid"
 ]
 g_activeUser = []
-g_currentCharacter = []
 
 def SQLConnect():
     return sql.connect(
