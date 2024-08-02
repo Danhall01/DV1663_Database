@@ -640,7 +640,7 @@ def ListGuilds(session, *void):
         print("\r{}: {}\tMembers: {}\tScore {}"\
             "".format(i, str(guild[0]).ljust(maxlenName + 1), str(guild[1]).ljust(5), guild[2]))
         if i != 0 and i % 5 == 0:
-            stop = input("Press enter to continue or 0 to stop: ")
+            stop = input("\rPress enter to continue or 0 to stop: ")
         try:
             stop = int(stop)
         except:
@@ -649,10 +649,23 @@ def ListGuilds(session, *void):
             break
     return 0
 
-#TODO
-# List specific guild if found
-def SearchGuild(session, void, guildName):
-    pass
+def SearchGuild(session, void, guildName=None):
+    if guildName == None:
+        guildName = GetInput_s("Enter Guildname: ")
+    
+    query = "SELECT Name, Members, Score FROM Guilds WHERE Guilds.Name = \"{}\";".format(guildName)
+    if _SafeQuery(session, query) != 0:
+        return -1
+    data = session.fetchall()
+    if len(data) == 0:
+        print("\r[w]\tCould not find guild \"{}\", ensure the name was spelt correctly")
+        return -1
+    
+    guild = data[0]
+    maxlenName = len(guild[0])
+    print("\r1: {}\tMembers: {}\tScore {}"\
+            "".format(str(guild[0]).ljust(maxlenName + 1), str(guild[1]).ljust(5), guild[2]))
+    return 0
 
 # Reserve Guildname (Set active with no members)
 def ReserveGuildName(session, connection, guildName=None, silent=False):
