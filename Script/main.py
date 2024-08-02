@@ -628,10 +628,26 @@ def LevelUp(session, connection, userId=None, characterName=None, server=None, l
         print("\t[+]\tSuccessfully leveled up character \"{}-{}\" to level {}")
     return 0
 
-#TODO
-# List all guilds (with cap (function), incremental (5 at a time))
 def ListGuilds(session, *void):
-    pass
+    query = "SELECT Name, Members, Score FROM Guilds;"
+    if _SafeQuery(session, query) != 0:
+        return -1
+    data = session.fetchall()
+    
+    maxlenName = max(len(guild[0]) for guild in data)
+    stop = 1
+    for i, guild in enumerate(data):
+        print("\r{}: {}\tMembers: {}\tScore {}"\
+            "".format(i, str(guild[0]).ljust(maxlenName + 1), str(guild[1]).ljust(5), guild[2]))
+        if i != 0 and i % 5 == 0:
+            stop = input("Press enter to continue or 0 to stop: ")
+        try:
+            stop = int(stop)
+        except:
+            continue
+        if stop == 0:
+            break
+    return 0
 
 #TODO
 # List specific guild if found
