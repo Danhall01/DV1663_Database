@@ -667,7 +667,6 @@ def SearchGuild(session, void, guildName=None):
             "".format(str(guild[0]).ljust(maxlenName + 1), str(guild[1]).ljust(5), guild[2]))
     return 0
 
-# Reserve Guildname (Set active with no members)
 def ReserveGuildName(session, connection, guildName=None, silent=False):
     if guildName == None:
         guildName = GetInput_s("Enter Guildname: ")
@@ -690,7 +689,6 @@ def ReserveGuildName(session, connection, guildName=None, silent=False):
         print("\r[+]\tSuccessfully reserved guild \"{}\"".format(guildName))
     return 0
 
-# Create Guild
 def CreateGuild(session, connection, guildName=None, silent=False):
     if guildName == None:
         guildName = GetInput_s("Enter Guildname: ")
@@ -704,7 +702,6 @@ def CreateGuild(session, connection, guildName=None, silent=False):
         print("\r[+]\tSuccessfully created guild \"{}\"".format(guildName))
     return 0
 
-# Join Guild
 def JoinGuild(session, connection, userId=None, characterName=None, server=None, guildName=None, silent=False):
     if userId == None:
         global g_activeUser
@@ -734,8 +731,7 @@ def JoinGuild(session, connection, userId=None, characterName=None, server=None,
         print("\r[+]\t\"{}-{}\" succsessfully joined the guild \"{}\"".format(characterName, server, guildName))
     return 0
 
-# Leave Guild
-def LeaveGuild(session, connection, userId, characterName, server, silent=False):
+def LeaveGuild(session, connection, userId=None, characterName=None, server=None, silent=False):
     if userId == None:
         global g_activeUser
         if not g_activeUser:
