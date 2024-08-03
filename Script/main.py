@@ -688,6 +688,62 @@ def LevelUp(session, connection, userId=None, characterName=None, server=None, l
         print("\t[+]\tSuccessfully leveled up character \"{}-{}\" to level {}")
     return 0
 
+def JoinGuild(session, connection, userId=None, characterName=None, server=None, guildName=None, silent=False):
+    if userId == None:
+        global g_activeUser
+        if not g_activeUser:
+            if not silent:
+                print("\r[w]\tUnable to create characters, you are not logged in")
+                return -1
+        userId = g_activeUser[0]
+    if characterName == None:
+        characterName = GetInput_s("Enter Character name: ")
+    if server == None:
+        server = GetInput_s("Enter Server name: ")
+    if guildName == None:
+        guildName = GetInput_s("Enter Guild name: ")
+    
+    query = "UPDATE PlayerCharacters " \
+            "SET PlayerCharacters.GuildId = \"{}\" "    \
+            "WHERE PlayerCharacters.Name = \"{}\" "     \
+            "AND PlayerCharacters.ServerId = \"{}\" "   \
+            "AND PlayerCharacters.AccountId = {};"   \
+            "".format(guildName, characterName, server, userId)
+            
+    if _SafeQuery(session, query) != 0:
+        return -1
+    connection.commit()
+    if not silent:
+        print("\r[+]\t\"{}-{}\" succsessfully joined the guild \"{}\"".format(characterName, server, guildName))
+    return 0
+
+def LeaveGuild(session, connection, userId=None, characterName=None, server=None, silent=False):
+    if userId == None:
+        global g_activeUser
+        if not g_activeUser:
+            if not silent:
+                print("\r[w]\tUnable to create characters, you are not logged in")
+                return -1
+        userId = g_activeUser[0]
+    if characterName == None:
+        characterName = GetInput_s("Enter Character name: ")
+    if server == None:
+        server = GetInput_s("Enter Server name: ")
+    
+    query = "UPDATE PlayerCharacters " \
+            "SET PlayerCharacters.GuildId = NULL "    \
+            "WHERE PlayerCharacters.Name = \"{}\" "     \
+            "AND PlayerCharacters.ServerId = \"{}\" "   \
+            "AND PlayerCharacters.AccountId = {};"   \
+            "".format(characterName, server, userId)
+            
+    if _SafeQuery(session, query) != 0:
+        return -1
+    connection.commit()
+    if not silent:
+        print("\r[+]\t\"{}-{}\" Succsessfully left their guild".format(characterName, server))
+    return 0
+
 def ListGuilds(session, *void):
     query = "SELECT Name, Members, Score FROM Guilds;"
     if _SafeQuery(session, query) != 0:
@@ -762,75 +818,55 @@ def CreateGuild(session, connection, guildName=None, silent=False):
         print("\r[+]\tSuccessfully created guild \"{}\"".format(guildName))
     return 0
 
-def JoinGuild(session, connection, userId=None, characterName=None, server=None, guildName=None, silent=False):
-    if userId == None:
-        global g_activeUser
-        if not g_activeUser:
-            if not silent:
-                print("\r[w]\tUnable to create characters, you are not logged in")
-                return -1
-        userId = g_activeUser[0]
-    if characterName == None:
-        characterName = GetInput_s("Enter Character name: ")
-    if server == None:
-        server = GetInput_s("Enter Server name: ")
+
+def ListGuildMembers(session, void, guildName=None, silent=False):
     if guildName == None:
-        guildName = GetInput_s("Enter Guild name: ")
+        guildName = GetInput_s("Enter Guildname: ")
     
-    query = "UPDATE PlayerCharacters " \
-            "SET PlayerCharacters.GuildId = \"{}\" "    \
-            "WHERE PlayerCharacters.Name = \"{}\" "     \
-            "AND PlayerCharacters.ServerId = \"{}\" "   \
-            "AND PlayerCharacters.AccountId = {};"   \
-            "".format(guildName, characterName, server, userId)
-            
+    query = "SELECT p.Name, p.Class, p.Level, p.IsLoggedIn, "\
+                "s.Name as serverName, s.Status, "\
+                "g.Name as guildName, g.Score, g.Members, ( "\
+                    "SELECT COUNT(*) FROM PlayerCharacters p2 WHERE p2.GuildId = g.Name AND p2.IsLoggedIn = True "\
+                ") as OnlineMembers "\
+                "FROM playercharacters p "\
+            "LEFT JOIN Guilds g ON g.Name = p.GuildId "\
+            "INNER JOIN servers s ON s.Name = p.ServerId "\
+            "WHERE p.GuildId = \"{}\" AND p.IsLoggedIn = True "\
+            "ORDER BY p.Level DESC; "\
+            "".format(guildName)
     if _SafeQuery(session, query) != 0:
         return -1
-    connection.commit()
-    if not silent:
-        print("\r[+]\t\"{}-{}\" succsessfully joined the guild \"{}\"".format(characterName, server, guildName))
-    return 0
-
-def LeaveGuild(session, connection, userId=None, characterName=None, server=None, silent=False):
-    if userId == None:
-        global g_activeUser
-        if not g_activeUser:
-            if not silent:
-                print("\r[w]\tUnable to create characters, you are not logged in")
-                return -1
-        userId = g_activeUser[0]
-    if characterName == None:
-        characterName = GetInput_s("Enter Character name: ")
-    if server == None:
-        server = GetInput_s("Enter Server name: ")
-    
-    query = "UPDATE PlayerCharacters " \
-            "SET PlayerCharacters.GuildId = NULL "    \
-            "WHERE PlayerCharacters.Name = \"{}\" "     \
-            "AND PlayerCharacters.ServerId = \"{}\" "   \
-            "AND PlayerCharacters.AccountId = {};"   \
-            "".format(characterName, server, userId)
-            
-    if _SafeQuery(session, query) != 0:
+    blob = session.fetchall()
+    if len(blob) == 0:
+        print("\r[w]\tNo players currently playing in guild (Or guild does not exist)")
         return -1
-    connection.commit()
-    if not silent:
-        print("\r[+]\t\"{}-{}\" Succsessfully left their guild".format(characterName, server))
-    return 0
+    print("Currently online characters in \"{}\": {}/{}".format(guildName, len(blob), str(blob[0][8])))
+    
+    padName = max(max(len("\"" + character[0] + "\"" + "-" + character[4]), len(character[1])) for character in blob)
+    padStatus = max(max(len(character[5]) + 1 for character in blob), len("Lvl: 20"))
+    for characterblob in blob:
+        (cName, className, Level, isLoggedIn, 
+         serverName, serverStatus, guildName, 
+         guildScore, guildMembers, guildMembersOnline) = characterblob
+        
+        formatName = "\"" + cName + "\"" + "-" + serverName
+        formatClassName = "\t" + className
+        formatLevel = "Lvl: " + str(Level)
+        formatStatus = "(" + serverStatus + ")"
+        formatGuildData = "{}({}/{}, {})".format(guildName, guildMembersOnline, guildMembers, guildScore)
+        
+        print("\r{} {} | {}"\
+              "".format(formatName.ljust(padName + 1),
+                        formatStatus.ljust(padStatus + 1),
+                        formatGuildData if guildName else "No Guild"))
+        print("\r{}{} | {}\n"\
+            "".format(formatClassName.ljust(padName - 4),
+                      formatLevel.ljust(padStatus),
+                      "Online" if isLoggedIn else ""))
 
-#TODO
-# Get My Guild Information (Amount of players, Online players & Who + their server)
-def ListGuildMembers(session, void, guildName, silent=False):
-    if userId == None:
-        global g_activeUser
-        if not g_activeUser:
-            print("\r[w]\tUnable to list guild characters, you are not logged in")
-            return -1
-        userId = g_activeUser[0]
-    if characterName == None:
-        characterName = GetInput_s("Enter Character name: ")
-    if server == None:
-        server = GetInput_s("Enter Server name: ")
+    if not silent:
+        print("\r[+]\tFinished listing characters")
+    return 0
 
 #TODO
 # Get Top Guild Information (Players JOIN Guild JOIN Server(guild[Low]:\nPlayers...))
@@ -1030,20 +1066,20 @@ def UserHelp(login, *void):
         "2: Create Account\n"\
             "\n"\
         "(Requires login):\n"
-        "3: Create Character\n"\
-        "4: Delete Character\n"\
-        "5: Login to Character\n"\
-        "6: Display all Characters on Account\n"\
+        "3: Display all Characters on Account\n"\
+        "4: Create Character\n"\
+        "5: Delete Character\n"\
+        "6: Login to Character\n"\
         "7: Level up Character\n"\
+        "8: Join Guild\n"\
+        "9: Leave Guild\n"\
             "\n"\
-        "8: List all Guilds\n"\
-        "9: Search for Guild\n"\
-        "10: Reserve Guild Name\n"\
-        "11: Create Guild\n"\
-        "12: Join Guild\n"\
-        "13: Leave Guild\n"\
-        "14: List all Guild Member Characters\n"\
-        "15: List Top Guild\n"
+        "10: List all Guilds\n"\
+        "11: Search for Guild\n"\
+        "12: Reserve Guild Name\n"\
+        "13: Create Guild\n"\
+        "14: List all Guild Members (Specific guild)\n"\
+        "15: List Top Guild Members\n"
     )
 def AdminHelp(*void):
     print("\033[H\033[J", end="")
@@ -1088,18 +1124,18 @@ if __name__ == "__main__":
         1: LogInAccount,
         2: CreateAccount,
         
-        3: CreateCharacter,
-        4: DeleteCharacter,
-        5: LogInCharacter,
-        6: DisplayAllCharactersAccount,
+        3: DisplayAllCharactersAccount,
+        4: CreateCharacter,
+        5: DeleteCharacter,
+        6: LogInCharacter,
         7: LevelUp,
+        8: JoinGuild,
+        9: LeaveGuild,
         
-        8: ListGuilds,
-        9: SearchGuild,
-        10: ReserveGuildName,
-        11: CreateGuild,
-        12: JoinGuild,
-        13: LeaveGuild,
+        10: ListGuilds,
+        11: SearchGuild,
+        12: ReserveGuildName,
+        13: CreateGuild,
         14: ListGuildMembers,
         15: ListTopGuild,
         
