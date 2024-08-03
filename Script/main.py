@@ -818,7 +818,6 @@ def CreateGuild(session, connection, guildName=None, silent=False):
         print("\r[+]\tSuccessfully created guild \"{}\"".format(guildName))
     return 0
 
-
 def ListGuildMembers(session, void, guildName=None, silent=False):
     if guildName == None:
         guildName = GetInput_s("Enter Guildname: ")
@@ -868,10 +867,18 @@ def ListGuildMembers(session, void, guildName=None, silent=False):
         print("\r[+]\tFinished listing guild characters")
     return 0
 
-#TODO
-# Get Top Guild Information (Players JOIN Guild JOIN Server(guild[Low]:\nPlayers...))
 def ListTopGuild(session, *void):
-    pass
+    query = "SELECT Name, score FROM Guilds ORDER BY Guilds.Score DESC LIMIT 1;"
+    if _SafeQuery(session, query) != 0:
+        return -1
+    blob = session.fetchall()
+    if len(blob) != 1:
+        print("\r[w]\tUnable to find top guild")
+        return -1
+    guildName = blob[0][0]
+    guildScore = str(blob[0][1])
+    print("Top Guild \"{}\" with score {}".format(guildName, guildScore))
+    ListGuildMembers(session, None, guildName)
 
 # ======================= Admin
 def SetUserStatus(session, connection, userId=None, active=None, silent=False):
