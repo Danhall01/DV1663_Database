@@ -589,10 +589,71 @@ def LogInCharacter(session, connection, userId=None, characterName=None, server=
         print("\r[+]\tSuccessfuly logged in character \"{}-{}\" to server \"{}\"".format(characterName, server, server))
     return 0
 
-#TODO
-# Display all characters (n/12 used slots\n...) (Character JOIN server JOIN guild)
-def DisplayAllCharactersAccount(session, void, userId):
-    pass
+def DisplayAllCharactersAccount(session, void, userId=None, silent=False):
+    if userId == None:
+        global g_activeUser
+        if not g_activeUser:
+            print("\r[w]\tUnable to list characters, you are not logged in")
+            return -1
+        userId = g_activeUser[0]
+    
+    queryAccount = "SELECT a.Username, a.Id, a.FirstName, a.LastName, a.Active FROM Accounts a WHERE a.Id = {};"\
+        "".format(userId)
+    if _SafeQuery(session, queryAccount) != 0:
+        return -1
+    user = session.fetchall()
+    if len(user) == 0:
+        print("\r[w]\tCould not find account")
+        return -1
+    user = user[0]
+    
+    print("\033[H\033[J", end="")
+    print("\r{}#{} ({})\n\r({} {})\n".format(user[0], user[1], "Active" if user[4] else "Inactive", user[2], user[3]))
+    
+    query = "SELECT p.Name, p.Class, p.Level, p.IsLoggedIn, "\
+                "s.Name as serverName, s.Status, "\
+                "g.Name as guildName, g.Score, g.Members, ( "\
+                    "SELECT COUNT(*) FROM PlayerCharacters p2 WHERE p2.GuildId = g.Name AND p2.IsLoggedIn = True "\
+                ") as OnlineMembers "\
+                "FROM playercharacters p "\
+            "LEFT JOIN Guilds g ON g.Name = p.GuildId "\
+            "INNER JOIN servers s ON s.Name = p.ServerId "\
+            "WHERE p.AccountId = {} "\
+            "ORDER BY p.Level DESC; "\
+            "".format(userId)
+    if _SafeQuery(session, query) != 0:
+        return -1
+    blob = session.fetchall()
+    if len(blob) == 0:
+        print("\r[w]\tCould not find any characters on account")
+        return -1
+    print("Characters: {}/{}".format(len(blob), str(MAX_CHARACTERS)))
+    
+    padName = max(max(len("\"" + character[0] + "\"" + "-" + character[4]), len(character[1])) for character in blob)
+    padStatus = max(max(len(character[5]) + 1 for character in blob), len("Lvl: 20"))
+    for characterblob in blob:
+        (cName, className, Level, isLoggedIn, 
+         serverName, serverStatus, guildName, 
+         guildScore, guildMembers, guildMembersOnline) = characterblob
+        
+        formatName = "\"" + cName + "\"" + "-" + serverName
+        formatClassName = "\t" + className
+        formatLevel = "Lvl: " + str(Level)
+        formatStatus = "(" + serverStatus + ")"
+        formatGuildData = "{}({}/{}, {})".format(guildName, guildMembersOnline, guildMembers, guildScore)
+        
+        print("\r{} {} | {}"\
+              "".format(formatName.ljust(padName + 1),
+                        formatStatus.ljust(padStatus + 1),
+                        formatGuildData))
+        print("\r{}{} | {}\n"\
+            "".format(formatClassName.ljust(padName - 4),
+                      formatLevel.ljust(padStatus),
+                      "Online" if isLoggedIn else ""))
+
+    if not silent:
+        print("\r[+]\tFinished listing characters")
+    
 
 def LevelUp(session, connection, userId=None, characterName=None, server=None, levels=None, silent=False):
     if userId == None:
@@ -759,8 +820,17 @@ def LeaveGuild(session, connection, userId=None, characterName=None, server=None
 
 #TODO
 # Get My Guild Information (Amount of players, Online players & Who + their server)
-def ListGuildMembers(session, void, userId, guildName):
-    pass
+def ListGuildMembers(session, void, userId, characterName, server, silent=False):
+    if userId == None:
+        global g_activeUser
+        if not g_activeUser:
+            print("\r[w]\tUnable to list guild characters, you are not logged in")
+            return -1
+        userId = g_activeUser[0]
+    if characterName == None:
+        characterName = GetInput_s("Enter Character name: ")
+    if server == None:
+        server = GetInput_s("Enter Server name: ")
 
 #TODO
 # Get Top Guild Information (Players JOIN Guild JOIN Server(guild[Low]:\nPlayers...))
