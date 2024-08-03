@@ -865,7 +865,7 @@ def ListGuildMembers(session, void, guildName=None, silent=False):
                       "Online" if isLoggedIn else ""))
 
     if not silent:
-        print("\r[+]\tFinished listing characters")
+        print("\r[+]\tFinished listing guild characters")
     return 0
 
 #TODO
