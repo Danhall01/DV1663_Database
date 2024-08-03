@@ -645,7 +645,7 @@ def DisplayAllCharactersAccount(session, void, userId=None, silent=False):
         print("\r{} {} | {}"\
               "".format(formatName.ljust(padName + 1),
                         formatStatus.ljust(padStatus + 1),
-                        formatGuildData))
+                        formatGuildData if guildName else "No Guild"))
         print("\r{}{} | {}\n"\
             "".format(formatClassName.ljust(padName - 4),
                       formatLevel.ljust(padStatus),
@@ -653,6 +653,7 @@ def DisplayAllCharactersAccount(session, void, userId=None, silent=False):
 
     if not silent:
         print("\r[+]\tFinished listing characters")
+    return 0
     
 
 def LevelUp(session, connection, userId=None, characterName=None, server=None, levels=None, silent=False):
