@@ -28,8 +28,8 @@ g_activeUser = []
 
 def SQLConnect():
     return sql.connect(
-        user='Dan',
-        password='admin',
+        user='',
+        password='',
         # database='GameData',
         # host='127.0.0.1:3306'
         unix_socket= '/Applications/MAMP/tmp/mysql/mysql.sock'
