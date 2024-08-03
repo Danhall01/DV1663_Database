@@ -1,4 +1,4 @@
-## Before you download the files
+## Requirements
 1. Ensure you have a MySQL server running on your machine.
 2. Ensure that the python library "Faker" is installed in your environment (Refer to https://faker.readthedocs.io/en/master/)
 
