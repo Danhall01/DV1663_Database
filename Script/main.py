@@ -654,7 +654,6 @@ def DisplayAllCharactersAccount(session, void, userId=None, silent=False):
     if not silent:
         print("\r[+]\tFinished listing characters")
     return 0
-    
 
 def LevelUp(session, connection, userId=None, characterName=None, server=None, levels=None, silent=False):
     if userId == None:
@@ -821,7 +820,7 @@ def LeaveGuild(session, connection, userId=None, characterName=None, server=None
 
 #TODO
 # Get My Guild Information (Amount of players, Online players & Who + their server)
-def ListGuildMembers(session, void, userId, characterName, server, silent=False):
+def ListGuildMembers(session, void, guildName, silent=False):
     if userId == None:
         global g_activeUser
         if not g_activeUser:
@@ -855,6 +854,13 @@ def SetUserStatus(session, connection, userId=None, active=None, silent=False):
 def PurgeGuild(session, connection, guildName=None, silent=False):
     if guildName == None:
         guildName = GetInput_s("Enter Guild Name: ")
+        queryExists = "SELECT * FROM Guilds WHERE Guilds.Name = \"{}\";".format(guildName)
+        if _SafeQuery(session, queryExists) != 0:
+            return -1
+        if len(session.fetchall()) != 1:
+            print("\r[w]\tNo guild named \"{}\" exists".format(guildName))
+            return -1
+        
         confirm = GetInput_s(
             "WARNING: All members of guild \"{}\" will be removed and guild will become inactive, continue? (y/n): "\
                 "".format(guildName)
