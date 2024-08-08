@@ -28,8 +28,8 @@ g_activeUser = []
 
 def SQLConnect():
     return sql.connect(
-        user='',
-        password='',
+        user='Dan',
+        password='admin',
         # database='GameData',
         # host='127.0.0.1:3306'
         unix_socket= '/Applications/MAMP/tmp/mysql/mysql.sock'
@@ -668,7 +668,7 @@ def LevelUp(session, connection, userId=None, characterName=None, server=None, l
     if server == None:
         server = GetInput_s("Enter Server name: ")
     if levels == None:
-        levels = GetInput_s("Enter amount of levels to give character (int, 1-20): ", lambda arg: arg if arg <=20 and arg > 0 else None)
+        levels = GetInput_s("Enter amount of levels to give character (int, levels: 1-20): ", lambda arg: int(arg) if int(arg) <=20 and int(arg) > 0 else None)
     
     query = "UPDATE PlayerCharacters " \
             "SET PlayerCharacters.Level = LEAST(PlayerCharacters.Level + GREATEST(0, {}), 20) "\
