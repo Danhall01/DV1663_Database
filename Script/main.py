@@ -774,7 +774,7 @@ def SearchGuild(session, void, guildName=None):
         return -1
     data = session.fetchall()
     if len(data) == 0:
-        print("\r[w]\tCould not find guild \"{}\", ensure the name was spelt correctly")
+        print("\r[w]\tCould not find guild \"{}\", ensure the name was spelt correctly".format(guildName))
         return -1
     
     guild = data[0]
