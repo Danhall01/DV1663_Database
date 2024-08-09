@@ -287,7 +287,7 @@ def PopulateTables(session, connection):
             print("{}".format(g_LoadbarCharacter), end="", flush=True)
     
     # Insert Admin Account
-    if CreateAccount(session, connection, "Admin", "Root", "Daniel", "Häll", silent=True) != 0:
+    if CreateAccount(session, connection, "Admin", "Root", "Daniel", "Häll", silent=True, autoLogin=False) != 0:
         return -1
     
     numAccounts = random.randint(25, 150)
@@ -299,7 +299,7 @@ def PopulateTables(session, connection):
             fData.password(),
             fData.first_name(),
             fData.last_name(),
-            silent=True
+            silent=True, autoLogin=False
         )
         if not fData.boolean():
             SetUserStatus(session, connection, uid, False, silent=True)
@@ -391,7 +391,7 @@ def LogInAccount(session, void, userId=None, userName=None, password=None, silen
         print("\r[+]\tSuccessfully logged in to user {}#{}".format(g_activeUser[1], g_activeUser[0]))
     return 0
 
-def CreateAccount(session, connection, username=None, password=None, firstName=None, lastName=None, silent=False):
+def CreateAccount(session, connection, username=None, password=None, firstName=None, lastName=None, silent=False, autoLogin=True):
     while username == None or password == None or firstName == None or lastName == None:
         if username == None:
             username = GetInput_s("Enter Username: ")
@@ -427,14 +427,15 @@ def CreateAccount(session, connection, username=None, password=None, firstName=N
         return -1
     connection.commit()
     
-    queryUpdateUserLocal = "SELECT * FROM Accounts ORDER BY Id DESC LIMIT 1;"
-    if _SafeQuery(session, queryUpdateUserLocal) != 0:
-        return -1
-    global g_activeUser
-    g_activeUser = session.fetchall()[0]
-    if not silent:
-        print("\r[+]\tSuccessfully created User {}#{}".format(g_activeUser[1], g_activeUser[0]))
-        print("\r[+]\tSuccessfully logged in to user {}#{}".format(g_activeUser[1], g_activeUser[0]))
+    if autoLogin:
+        queryUpdateUserLocal = "SELECT * FROM Accounts ORDER BY Id DESC LIMIT 1;"
+        if _SafeQuery(session, queryUpdateUserLocal) != 0:
+            return -1
+        global g_activeUser
+        g_activeUser = session.fetchall()[0]
+        if not silent:
+            print("\r[+]\tSuccessfully created User {}#{}".format(g_activeUser[1], g_activeUser[0]))
+            print("\r[+]\tSuccessfully logged in to user {}#{}".format(g_activeUser[1], g_activeUser[0]))
     return 0
 
 def CreateCharacter(session, connection, userId=None, characterName=None, server=None, className=None, silent=False):
